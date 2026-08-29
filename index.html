@@ -1,0 +1,2250 @@
+<title>Shift Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #EEF1F3;
+    --surface: #FFFFFF;
+    --surface-2: #F7F8FA;
+    --ink: #171B21;
+    --muted: #5E6875;
+    --line: #DCE1E6;
+    --accent: #0C7C8C;
+    --accent-ink: #FFFFFF;
+    --accent-soft: #CFEAEA;
+    --accent-soft-ink: #0C5560;
+    --slate: #7C8896;
+    --slate-soft: #E7EAED;
+    --slate-ink: #3C4552;
+    --alarm: #C6303B;
+    --alarm-soft: #F7DBDD;
+    --alarm-ink: #7A121B;
+    --amber: #B5720A;
+    --amber-soft: #F3E2C4;
+    --shadow: 0 1px 2px rgba(20, 30, 40, 0.06), 0 8px 24px -12px rgba(20, 30, 40, 0.18);
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+    --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151B;
+      --surface: #171E26;
+      --surface-2: #1C2430;
+      --ink: #E7ECF1;
+      --muted: #92A0AC;
+      --line: #2A3340;
+      --accent: #2FB8C4;
+      --accent-ink: #06232A;
+      --accent-soft: #16323A;
+      --accent-soft-ink: #8FDDE5;
+      --slate: #8A93A0;
+      --slate-soft: #232C37;
+      --slate-ink: #C7CFD8;
+      --alarm: #E8636A;
+      --alarm-soft: #3B1E22;
+      --alarm-ink: #FFC9CC;
+      --amber: #E0A542;
+      --amber-soft: #3A2E14;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+      --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151B;
+    --surface: #171E26;
+    --surface-2: #1C2430;
+    --ink: #E7ECF1;
+    --muted: #92A0AC;
+    --line: #2A3340;
+    --accent: #2FB8C4;
+    --accent-ink: #06232A;
+    --accent-soft: #16323A;
+    --accent-soft-ink: #8FDDE5;
+    --slate: #8A93A0;
+    --slate-soft: #232C37;
+    --slate-ink: #C7CFD8;
+    --alarm: #E8636A;
+    --alarm-soft: #3B1E22;
+    --alarm-ink: #FFC9CC;
+    --amber: #E0A542;
+    --amber-soft: #3A2E14;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  h1, h2, h3 {
+    font-family: 'Barlow Condensed', system-ui, sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin: 0;
+  }
+  .mono, .grid-table, input[type="number"], .fader-value, .stat-value {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  button { font-family: inherit; }
+
+  .app { max-width: 1440px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 20px; box-shadow: var(--shadow);
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-mark {
+    font-size: 26px; width: 46px; height: 46px; border-radius: 10px;
+    background: var(--accent); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .brand h1 { font-size: 26px; color: var(--ink); }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+  .conflict-banner {
+    background: var(--alarm-soft); color: var(--alarm-ink); border: 1px solid var(--alarm);
+    border-radius: 8px; padding: 8px 14px; font-size: 12.5px; font-weight: 500; max-width: 480px;
+  }
+
+  .topbar-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .save-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .save-btn {
+    background: var(--accent); color: var(--accent-ink); border: none; border-radius: 7px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .save-btn:hover { filter: brightness(1.06); }
+  .save-btn:disabled { opacity: 0.6; cursor: default; }
+  .save-status { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .auth-status { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .auth-link-btn {
+    background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 7px;
+    padding: 7px 12px; font-size: 12.5px; font-weight: 500; cursor: pointer;
+  }
+  .auth-link-btn:hover { background: var(--surface-2); }
+  .login-panel {
+    display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 12px; font-size: 12.5px;
+  }
+  .login-panel[hidden] { display: none; }
+  .login-panel input[type="email"] {
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12.5px; width: 200px;
+  }
+  .login-msg { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+
+  .console { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 20px; }
+  @media (max-width: 880px) { .console { position: static; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; box-shadow: var(--shadow);
+  }
+  .panel h2 { font-size: 15px; color: var(--ink); margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }
+  .panel h2 .hint { text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--muted); font-weight: 400; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  .field input[type="number"] {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 6px 8px; font-size: 13px; width: 100%;
+  }
+  .field input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .readout { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; justify-content: space-between; }
+  .readout .mono { color: var(--ink); font-weight: 500; }
+
+  .fader { margin-bottom: 12px; }
+  .fader:last-child { margin-bottom: 0; }
+  .fader-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+  .fader-name { font-size: 12.5px; font-weight: 500; }
+  .fader-value { font-size: 12px; color: var(--accent); font-weight: 600; }
+  .fader-track { display: flex; align-items: center; gap: 8px; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; flex: 1; height: 5px; border-radius: 3px;
+    background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--fill, 50%), var(--slate-soft) var(--fill, 50%), var(--slate-soft) 100%);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+    border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); cursor: pointer;
+  }
+  input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .fader-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 2px; gap: 8px; }
+  .fader-weight { font-size: 10.5px; color: var(--muted); }
+  .fader-wage { font-size: 10.5px; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .fader-wage input[type="number"] {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
+    color: var(--ink); padding: 2px 5px; font-size: 11px; width: 52px; text-align: right;
+  }
+
+  /* Grade/weight/wage are payroll-adjacent info — visible only when signed in
+     as admin. The underlying numbers still load into the browser either way
+     (the scheduling math needs them), this only controls what's rendered —
+     see the comment on ADMIN_EMAIL for the real (server-side) boundary. */
+  body:not(.is-admin) .admin-only { display: none !important; }
+  body.is-admin .viewer-mask { display: none !important; }
+  .viewer-mask { color: var(--muted); font-size: 10.5px; }
+  .fader-value-lock, .fader-weight-lock, .fader-wage-lock { font-size: 10.5px; color: var(--muted); }
+  .fader-track-lock { font-size: 10.5px; color: var(--muted); padding: 6px 0; }
+  .fader-wage input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .fader-location { margin-top: 5px; }
+  .loc-select, .loc-other-input {
+    width: 100%; font-size: 10.5px; padding: 3px 5px; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 5px; color: var(--muted);
+  }
+  .loc-other-input { margin-top: 4px; color: var(--ink); }
+
+  .fader.is-fixed .fader-track,
+  .fader.is-fixed .fader-weight { opacity: 0.35; pointer-events: none; }
+  .fader-fixed { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
+  .fixed-toggle {
+    display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; color: var(--muted);
+    cursor: pointer; line-height: 1.35;
+  }
+  .fixed-toggle input[type="checkbox"] { margin-top: 1px; flex: 0 0 auto; }
+  .fixed-editor { margin-top: 8px; }
+  .fixed-editor .block-row { gap: 4px; }
+  .fixed-editor .block-row select,
+  .fixed-editor .block-row input[type="time"] { font-size: 10.5px; padding: 4px 5px; }
+  .fixed-editor ul.block-list li { font-size: 10.5px; }
+  .fixed-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--accent); background: var(--accent-soft, var(--surface-2));
+    border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .fader-classes { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
+  .fader-classes summary {
+    font-size: 10.5px; color: var(--muted); cursor: pointer; list-style: none;
+    display: flex; align-items: center; gap: 5px; user-select: none;
+  }
+  .fader-classes summary::-webkit-details-marker { display: none; }
+  .fader-classes summary::before { content: '▸'; font-size: 9px; color: var(--muted); transition: transform 0.15s; }
+  .fader-classes[open] summary::before { transform: rotate(90deg); }
+  .fader-classes .count-badge { color: var(--muted); }
+  .classes-editor { margin-top: 8px; }
+  .classes-editor .block-row { gap: 4px; }
+  .classes-editor .block-row select,
+  .classes-editor .block-row input[type="time"],
+  .classes-editor .block-row input[type="text"] { font-size: 10.5px; padding: 4px 5px; }
+  .classes-editor ul.block-list li { font-size: 10.5px; }
+
+  .presets { display: flex; gap: 6px; margin-top: 10px; }
+  .presets button {
+    flex: 1; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 6px 4px; font-size: 11px; cursor: pointer;
+  }
+  .presets button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .summary .hint { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+  .summary pre {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; font-size: 11px; white-space: pre-wrap; word-break: break-word;
+    margin: 0; color: var(--ink); user-select: all;
+  }
+
+  .stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 5px; box-shadow: var(--shadow); }
+  .tabs button {
+    flex: 1; background: transparent; border: none; border-radius: 8px; padding: 9px 10px;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 600; letter-spacing: 0.02em;
+    text-transform: uppercase; font-size: 13px; color: var(--muted); cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+  .tabs button:hover:not([aria-selected="true"]) { color: var(--ink); background: var(--surface-2); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .tabpanel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow); overflow-x: auto;
+  }
+
+  table.plan-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 900px; }
+  table.plan-table th, table.plan-table td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: right; }
+  table.plan-table th:first-child, table.plan-table td:first-child { text-align: left; }
+  table.plan-table thead th {
+    font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em;
+    font-weight: 600; color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--line); vertical-align: bottom;
+  }
+  table.plan-table tbody tr:hover { background: var(--surface-2); }
+  table.plan-table tr.total-row { font-weight: 600; border-top: 2px solid var(--line); }
+  table.plan-table tr.total-row td { background: var(--surface-2); }
+  table.plan-table tr.unalloc-row td { font-style: italic; color: var(--muted); border-bottom: none; }
+  table.plan-table tr.location-row td {
+    background: var(--slate-soft); color: var(--slate-ink); font-weight: 700; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.03em; font-family: 'Barlow Condensed', sans-serif;
+    padding: 5px 9px;
+  }
+  table.plan-table tr.subtotal-row td { font-style: italic; color: var(--muted); background: var(--surface-2); }
+
+  h3.subhead {
+    font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em;
+    font-size: 13px; color: var(--muted); font-weight: 600; margin: 22px 0 10px;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  .util-bar-wrap { display: inline-flex; align-items: center; gap: 6px; min-width: 78px; }
+  .util-bar { width: 46px; height: 5px; border-radius: 3px; background: var(--slate-soft); overflow: hidden; flex-shrink: 0; }
+  .util-bar > span { display: block; height: 100%; background: var(--accent); }
+
+  .grid-wrap { overflow-x: auto; }
+  table.grid-table { border-collapse: collapse; font-size: 11px; min-width: 720px; width: 100%; }
+  table.grid-table th {
+    background: var(--slate); color: var(--surface); font-family: 'Barlow Condensed', sans-serif;
+    text-transform: uppercase; letter-spacing: 0.02em; font-size: 12px; padding: 6px 8px; font-weight: 600;
+  }
+  table.grid-table td.timecol {
+    color: var(--muted); text-align: right; padding-right: 8px; font-size: 10px;
+    white-space: nowrap; vertical-align: top; border-bottom: 1px solid var(--surface-2);
+  }
+  table.grid-table td.cell {
+    text-align: center; vertical-align: middle; border: 1px solid var(--surface);
+    padding: 3px 4px; line-height: 1.35; font-weight: 500; font-size: 10.5px;
+  }
+  td.cell.n1 { background: var(--accent-soft); color: var(--accent-soft-ink); }
+  td.cell.n2 { background: color-mix(in srgb, var(--accent) 55%, var(--surface)); color: #fff; }
+  td.cell.n3 { background: var(--accent); color: var(--accent-ink); }
+  td.cell.over { background: var(--alarm); color: #fff; }
+  td.cell.gap { background: var(--surface-2); color: var(--muted); font-style: italic; font-weight: 400; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 11.5px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  .gaps-note { margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .gaps-note strong { color: var(--ink); }
+
+  .individual-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .individual-controls select {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 7px 10px; font-size: 13px; font-family: inherit;
+  }
+  .location-pill {
+    font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; letter-spacing: 0.01em;
+  }
+  .individual-grids { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .individual-grids > div { min-width: 0; }
+  @media (max-width: 1100px) { .individual-grids { grid-template-columns: 1fr; } }
+  .individual-grids h3 { font-size: 15px; margin-bottom: 8px; color: var(--muted); }
+
+  td.cell.sched { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  td.cell.offered { background: var(--accent-soft); color: var(--accent-soft-ink); font-weight: 400; font-size: 10px; }
+  td.cell.class-block { background: var(--slate-soft); color: var(--slate-ink); font-size: 9.5px; }
+  td.cell.internship-block { background: var(--amber-soft); color: var(--amber); font-size: 9.5px; }
+  td.cell.blank { background: var(--surface); }
+  td.cell.dropped { background: var(--surface-2); color: var(--muted); font-style: italic; font-size: 10px; }
+
+  .stat { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  .stat strong { color: var(--ink); }
+
+  /* --- Add Student panel --- */
+  .add-student .mini-head {
+    font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em;
+    font-size: 11px; color: var(--muted); font-weight: 600; margin: 12px 0 6px;
+  }
+  .add-student .mini-head .hint { text-transform: none; font-weight: 400; }
+  .block-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+  .block-row select, .block-row input[type="time"], .block-row input[type="text"] {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 5px 6px; font-size: 11.5px; flex: 1 1 70px; min-width: 0;
+  }
+  .block-row input[type="text"] { flex-basis: 100px; }
+  .block-row button.add-block-btn {
+    flex: 0 0 auto; background: var(--accent); color: var(--accent-ink); border: none;
+    border-radius: 6px; width: 26px; font-size: 15px; font-weight: 700; cursor: pointer; line-height: 1;
+  }
+  .block-row button.add-block-btn:hover { filter: brightness(1.08); }
+  ul.block-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  ul.block-list li {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
+    padding: 3px 6px; font-size: 11px; color: var(--ink);
+  }
+  ul.block-list button.rm-btn {
+    background: none; border: none; color: var(--alarm); font-size: 13px; font-weight: 700;
+    cursor: pointer; padding: 0 2px; line-height: 1;
+  }
+  .primary-btn {
+    width: 100%; margin-top: 6px; background: var(--accent); color: var(--accent-ink);
+    border: none; border-radius: 7px; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .primary-btn:hover { filter: brightness(1.06); }
+  #addStudentMsg { min-height: 14px; margin-top: 6px; }
+
+  /* --- Slice (concurrent-column) grid view --- */
+  .grid-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .location-filter { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 500; }
+  .location-filter select {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 5px 8px; font-size: 12.5px;
+  }
+  .view-toggle { display: flex; gap: 6px; margin-bottom: 0; }
+  .view-toggle button {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px;
+    color: var(--muted); font-size: 12px; font-weight: 600; padding: 6px 14px; cursor: pointer;
+    font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .view-toggle button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .view-toggle button:not(.active):hover { border-color: var(--accent); color: var(--accent); }
+
+  .slice-grid { display: flex; overflow-x: auto; }
+  .slice-axis { flex: 0 0 52px; position: relative; }
+  .slice-axis .tick {
+    position: absolute; right: 8px; transform: translateY(-50%);
+    font-size: 10px; color: var(--muted); font-family: 'IBM Plex Mono', monospace;
+  }
+  .slice-days { display: flex; flex: 1; gap: 3px; min-width: 640px; }
+  .slice-day { flex: 1; min-width: 100px; }
+  .slice-day-head {
+    text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); padding-bottom: 6px;
+    font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .slice-day-body {
+    position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    background-image: repeating-linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px, transparent var(--hour-px, 60px));
+  }
+  .slice-block {
+    position: absolute; border-radius: 4px; overflow: hidden; box-sizing: border-box;
+    border: 1px solid rgba(255,255,255,0.35); color: #fff; font-size: 9.5px; line-height: 1.25;
+    padding: 2px 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.55); cursor: default;
+  }
+  .slice-block.over-cap { outline: 2px solid var(--alarm); outline-offset: -2px; }
+  .slice-block .sb-name { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slice-block .sb-time { display: block; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slice-block .sb-short { display: none; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+  .slice-block.bare .sb-name, .slice-block.bare .sb-time { display: none; }
+  .slice-block.bare .sb-short { display: block; }
+
+  .slice-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 14px; font-size: 11.5px; color: var(--muted); }
+  .slice-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .slice-legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">🎛️</span>
+      <div>
+        <h1>Shift Console</h1>
+        <p>PSTCC Media Technologies — Fall 2026 work-study scheduling, live</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="save-controls">
+        <span id="authStatus" class="auth-status"></span>
+        <button type="button" id="loginBtn" class="auth-link-btn" hidden>Admin sign in</button>
+        <button type="button" id="logoutBtn" class="auth-link-btn" hidden>Sign out</button>
+        <button type="button" id="saveBtn" class="save-btn" hidden>Save</button>
+        <span id="saveStatus" class="save-status"></span>
+      </div>
+      <div id="loginPanel" class="login-panel" hidden>
+        <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email">
+        <button type="button" id="loginSendBtn" class="auth-link-btn">Send login link</button>
+        <button type="button" id="loginCancelBtn" class="auth-link-btn">Cancel</button>
+        <span id="loginMsg" class="login-msg"></span>
+      </div>
+      <div id="conflictBanner" class="conflict-banner" hidden></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="console">
+      <section class="panel">
+        <h2>Budget</h2>
+        <div class="field">
+          <label>Fall hours budget <span id="fallBudgetOut" class="mono"></span></label>
+          <input type="number" id="fallBudget" value="800" min="0" step="10">
+        </div>
+        <div class="field">
+          <label>Usable weeks <span id="usableWeeksOut" class="mono"></span></label>
+          <input type="number" id="usableWeeks" value="13" min="1" step="1">
+        </div>
+        <div class="readout"><span>Weekly rate</span><span id="weeklyRateOut" class="mono">—</span></div>
+        <div class="readout"><span>Semester total (With-Fri)</span><span id="semesterTotalOut" class="mono">—</span></div>
+        <div class="readout admin-only"><span>Weekly payroll $ (With-Fri)</span><span id="weeklyPayrollOut" class="mono">—</span></div>
+        <div class="readout admin-only"><span>Semester payroll $ (With-Fri)</span><span id="semesterPayrollOut" class="mono">—</span></div>
+      </section>
+
+      <section class="panel">
+        <h2>Hours <span class="hint">department open/close, 8am–6pm range</span></h2>
+        <div class="field">
+          <label>Opening time</label>
+          <select id="openTime"></select>
+        </div>
+        <div class="field">
+          <label>Closing time</label>
+          <select id="closeTime"></select>
+        </div>
+        <div class="readout"><span>Open window</span><span id="hoursWindowOut" class="mono">—</span></div>
+      </section>
+
+      <section class="panel">
+        <h2>Policy</h2>
+        <div class="field">
+          <label>Per-student weekly cap (h)</label>
+          <input type="number" id="weeklyCap" value="20" min="1" step="0.5">
+        </div>
+        <div class="field">
+          <label>Minimum shift (h)</label>
+          <input type="number" id="minShift" value="1" min="0.25" step="0.25">
+        </div>
+        <div class="field">
+          <label>Max concurrent workers</label>
+          <input type="number" id="maxConcurrent" value="3" min="1" max="6" step="1">
+        </div>
+      </section>
+
+      <section class="panel faders">
+        <h2>Grades <span class="hint">0–10, higher = more hours</span></h2>
+        <div id="faderList"></div>
+        <div class="presets">
+          <button type="button" data-preset="current">Current file (9/9/9/8/5/5)</button>
+          <button type="button" data-preset="equal">Equal weight</button>
+        </div>
+      </section>
+
+      <section class="panel add-student">
+        <h2>Add Student <span class="hint">runs in this browser only</span></h2>
+        <div class="field"><label>Name</label><input type="text" id="newName" placeholder="Full name"></div>
+        <div class="field"><label>Major</label><input type="text" id="newMajor" placeholder="optional"></div>
+        <div class="field"><label>Supervisor</label><input type="text" id="newSupervisor" placeholder="optional"></div>
+        <div class="field">
+          <label>Location</label>
+          <select id="newLocation"></select>
+          <input type="text" id="newLocation_other" class="loc-other-input" placeholder="New location name — Enter to confirm" hidden style="margin-top:5px;">
+        </div>
+
+        <h3 class="mini-head">Availability blocks</h3>
+        <div class="block-row">
+          <select id="newAvailDay"></select>
+          <input type="time" id="newAvailStart">
+          <input type="time" id="newAvailEnd">
+          <button type="button" class="add-block-btn" id="addAvailBlockBtn">+</button>
+        </div>
+        <ul class="block-list" id="newAvailList"></ul>
+
+        <h3 class="mini-head">Class / internship / job blocks <span class="hint">optional</span></h3>
+        <div class="block-row">
+          <select id="newClassDay"></select>
+          <input type="text" id="newClassCourse" placeholder="Course / name">
+          <input type="time" id="newClassStart">
+          <input type="time" id="newClassEnd">
+          <select id="newClassType">
+            <option value="Class">Class</option>
+            <option value="Internship">Internship</option>
+            <option value="Outside Job">Outside Job</option>
+          </select>
+          <button type="button" class="add-block-btn" id="addClassBlockBtn">+</button>
+        </div>
+        <ul class="block-list" id="newClassList"></ul>
+
+        <button type="button" class="primary-btn" id="submitNewStudentBtn">Add Student</button>
+        <p id="addStudentMsg" class="hint"></p>
+      </section>
+
+      <section class="panel summary admin-only">
+        <h2>Settings summary</h2>
+        <p class="hint">Select and copy this back to Claude to lock a configuration into the official workbook.</p>
+        <pre id="summaryOut" class="mono"></pre>
+      </section>
+    </aside>
+
+    <main class="stage">
+      <nav class="tabs" role="tablist" aria-label="Views">
+        <button role="tab" id="tabbtn-plan" aria-controls="tab-plan" aria-selected="true" data-tab="plan">Hours Plan</button>
+        <button role="tab" id="tabbtn-gridFri" aria-controls="tab-gridFri" aria-selected="false" data-tab="gridFri">Grid — With Friday</button>
+        <button role="tab" id="tabbtn-gridNoFri" aria-controls="tab-gridNoFri" aria-selected="false" data-tab="gridNoFri">Grid — No Friday</button>
+        <button role="tab" id="tabbtn-individual" aria-controls="tab-individual" aria-selected="false" data-tab="individual">Individual</button>
+      </nav>
+
+      <section id="tab-plan" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-plan">
+        <div id="planTableWrap"></div>
+        <div class="admin-only">
+          <h3 class="subhead">Payroll (per-student hourly wage × scheduled hours)</h3>
+          <div id="payrollTableWrap"></div>
+        </div>
+        <p class="viewer-mask hint">🔒 Payroll figures are visible to the signed-in admin only.</p>
+      </section>
+
+      <section id="tab-gridFri" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-gridFri" hidden>
+        <div class="grid-controls">
+          <div class="view-toggle" data-scope="Fri">
+            <button type="button" class="view-toggle-btn active" data-mode="blocks">Blocks</button>
+            <button type="button" class="view-toggle-btn" data-mode="slices">Columns</button>
+          </div>
+          <label class="location-filter">Location <select id="gridFriLocation" class="grid-loc-select"></select></label>
+        </div>
+        <div id="gridFriWrap"></div>
+        <div id="gridFriSliceWrap" hidden></div>
+      </section>
+
+      <section id="tab-gridNoFri" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-gridNoFri" hidden>
+        <div class="grid-controls">
+          <div class="view-toggle" data-scope="NoFri">
+            <button type="button" class="view-toggle-btn active" data-mode="blocks">Blocks</button>
+            <button type="button" class="view-toggle-btn" data-mode="slices">Columns</button>
+          </div>
+          <label class="location-filter">Location <select id="gridNoFriLocation" class="grid-loc-select"></select></label>
+        </div>
+        <div id="gridNoFriWrap"></div>
+        <div id="gridNoFriSliceWrap" hidden></div>
+      </section>
+
+      <section id="tab-individual" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-individual" hidden>
+        <div class="individual-controls">
+          <label for="studentSelect" class="hint" style="font-size:12px;color:var(--muted);">Student</label>
+          <select id="studentSelect"></select>
+          <span id="indLocationLabel" class="location-pill"></span>
+        </div>
+        <div class="individual-grids">
+          <div>
+            <h3>With Friday</h3>
+            <div id="indGridFri" class="grid-wrap"></div>
+            <p id="indStatFri" class="stat"></p>
+          </div>
+          <div>
+            <h3>No Friday</h3>
+            <div id="indGridNoFri" class="grid-wrap"></div>
+            <p id="indStatNoFri" class="stat"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+const STUDENTS = [{"name": "Eleanor Cole", "major": "Video Production", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 12.0}, {"day": "Monday", "start": 14.8333, "end": 17.0}, {"day": "Tuesday", "start": 9.0, "end": 13.0}, {"day": "Tuesday", "start": 15.0, "end": 16.0}, {"day": "Wednesday", "start": 9.0, "end": 16.5}, {"day": "Thursday", "start": 9.0, "end": 10.5}, {"day": "Thursday", "start": 12.3333, "end": 13.5}, {"day": "Friday", "start": 9.0, "end": 16.5}], "classes": [{"day": "Monday", "course": "Remote Field Production", "start": 12.0, "end": 14.8333, "type": "Class"}, {"day": "Tuesday", "course": "Diversity of Life", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Diversity of Life", "start": 10.5, "end": 12.3333, "type": "Class"}, {"day": "Thursday", "course": "Diversity of Life (2nd listing - verify)", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Thursday", "course": "Guerrilla Filmmaking", "start": 15.0, "end": 17.8333, "type": "Class"}]}, {"name": "Emilie Townsend", "major": "VPT", "supervisor": "Sharleen F.", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 12.0}, {"day": "Tuesday", "start": 9.0, "end": 12.0}, {"day": "Tuesday", "start": 14.8333, "end": 17.0}, {"day": "Wednesday", "start": 9.0, "end": 16.5}, {"day": "Thursday", "start": 9.0, "end": 12.0}, {"day": "Friday", "start": 10.0, "end": 16.5}], "classes": [{"day": "Monday", "course": "Remote Field Prod.", "start": 12.0, "end": 14.8333, "type": "Class"}, {"day": "Monday", "course": "Media Mgmt.", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Tuesday", "course": "Math 1010", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Tuesday", "course": "ENG 1010", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Thursday", "course": "Math 1010", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Thursday", "course": "ENG 1010", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Thursday", "course": "Adv Editing (Avid)", "start": 15.0, "end": 17.8333, "type": "Class"}]}, {"name": "Alexander Wachira", "major": "Video Production", "supervisor": "Sharleen Foster", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.5, "end": 11.5}, {"day": "Tuesday", "start": 9.5, "end": 11.5}, {"day": "Wednesday", "start": 9.5, "end": 16.5}, {"day": "Thursday", "start": 9.5, "end": 11.5}, {"day": "Friday", "start": 9.5, "end": 16.5}], "classes": [{"day": "Monday", "course": "Remote Field Production", "start": 12.0, "end": 14.8333, "type": "Class"}, {"day": "Monday", "course": "Scriptwriting for Mass Media", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Tuesday", "course": "Studio Production II", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Tuesday", "course": "Introduction to Film", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Studio Production II", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Thursday", "course": "Introduction to Film", "start": 13.5, "end": 14.8333, "type": "Class"}]}, {"name": "Tyler Smith", "major": "VPT", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 13.5}, {"day": "Tuesday", "start": 11.5, "end": 16.5}, {"day": "Wednesday", "start": 9.0, "end": 12.0}, {"day": "Thursday", "start": 9.0, "end": 10.0}, {"day": "Thursday", "start": 11.3333, "end": 17.0}, {"day": "Friday", "start": 9.0, "end": 16.5}], "classes": [{"day": "Monday", "course": "Special Topics In Video", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Tuesday", "course": "Photography 1", "start": 10.0, "end": 11.3333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Photography 1", "start": 10.0, "end": 11.3333, "type": "Class"}, {"day": "Thursday", "course": "Remote Field Production", "start": 18.0, "end": 20.8333, "type": "Class"}]}, {"name": "Donna Dearmon", "major": "VPT", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 15.0}, {"day": "Tuesday", "start": 14.5, "end": 15.0}, {"day": "Wednesday", "start": 9.0, "end": 17.0}, {"day": "Thursday", "start": 9.0, "end": 17.0}, {"day": "Friday", "start": 9.0, "end": 17.0}], "classes": [{"day": "Monday", "course": "Special Topics VPT1020 P05", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Monday", "course": "Intro to Media Management VPT1875 P70", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Tuesday", "course": "Internship", "start": 9.0, "end": 14.5, "type": "Internship"}, {"day": "Tuesday", "course": "Adobe After Effects VPT1021 P35", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing VPT2215 P72", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Remote Field Production VPT2960 P73", "start": 18.0, "end": 20.8333, "type": "Class"}]}, {"name": "Delia Gentry", "major": "PSY", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 11.3333, "end": 13.5}, {"day": "Tuesday", "start": 9.0, "end": 10.0}, {"day": "Tuesday", "start": 13.0, "end": 17.0}, {"day": "Thursday", "start": 9.0, "end": 10.0}, {"day": "Thursday", "start": 13.3333, "end": 17.0}, {"day": "Friday", "start": 9.0, "end": 16.0}], "classes": [{"day": "Monday", "course": "Class (course name not given - confirm)", "start": 8.5, "end": 11.3333, "type": "Class"}, {"day": "Monday", "course": "Class (course name not given - confirm)", "start": 13.5, "end": 21.0, "type": "Class"}, {"day": "Tuesday", "course": "Class (course name not given - confirm)", "start": 10.0, "end": 13.0, "type": "Class"}, {"day": "Wednesday", "course": "Class (course name not given - confirm)", "start": 8.5, "end": 21.0, "type": "Class"}, {"day": "Thursday", "course": "Class (course name not given - confirm)", "start": 10.0, "end": 13.3333, "type": "Class"}, {"day": "Friday", "course": "Outside job (non-PSTCC)", "start": 16.0, "end": 21.0, "type": "Outside Job"}]}];
+
+let WINDOW_START = 9.0, WINDOW_END = 17.0;
+const SLOT = 0.25;
+const HOURS_MIN = 8.0, HOURS_MAX = 18.0;
+const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const NO_FRI_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday"];
+const DEFAULT_GRADES = { "Eleanor Cole": 9, "Emilie Townsend": 9, "Alexander Wachira": 9, "Tyler Smith": 8, "Donna Dearmon": 5, "Delia Gentry": 5 };
+const NAMES = STUDENTS.map(s => s.name);
+const BASE_NAMES = new Set(NAMES); // the 6 students baked into this file, vs. ones added at runtime
+
+// ---------------------------------------------------------------------------
+// Locations: the concurrency cap (and the weekly-grid calendars) are enforced
+// PER LOCATION, not department-wide — two people in different buildings never
+// compete for the same room capacity. Budget/payroll stay one shared pool
+// across locations unless you ask to split those too.
+// ---------------------------------------------------------------------------
+const DEFAULT_LOCATION = "Equipment Room — Bagwell Building";
+const KNOWN_LOCATIONS = ["Equipment Room — Bagwell Building", "APE Suite — Alexander Building"];
+function registerLocation(loc) {
+  if (loc && !KNOWN_LOCATIONS.includes(loc)) KNOWN_LOCATIONS.push(loc);
+}
+function locationOf(name) {
+  const s = STUDENTS.find(x => x.name === name);
+  return (s && s.location) || DEFAULT_LOCATION;
+}
+// Placeholder — real hourly wages vary per student (returning students get a pay
+// bump) and aren't on file here, so every student defaults to the same flat rate.
+// Edit each one in the sidebar to the student's actual rate.
+const DEFAULT_WAGE = 10.00;
+// Populated at boot from whichever source wins (saved state, else legacy
+// localStorage, else this flat default) — read by faderMarkup/buildFaders.
+const WAGES = {};
+
+// ---------------------------------------------------------------------------
+// Runtime-added students — legacy fallback only. Before real cross-device saving
+// existed, students added at runtime were persisted to this browser's localStorage
+// alone (never synced anywhere). That mechanism now only runs as a fallback, on a
+// browser that has never loaded a real saved state from Supabase (see boot() below)
+// — once a real Save happens, the saved row is the source of truth and this is unused.
+// ---------------------------------------------------------------------------
+const CUSTOM_STUDENTS_KEY = 'pstcc_shift_console_custom_students_v1';
+function loadCustomStudents() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_STUDENTS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+function saveCustomStudents() {
+  try {
+    const custom = STUDENTS.filter(s => !BASE_NAMES.has(s.name));
+    localStorage.setItem(CUSTOM_STUDENTS_KEY, JSON.stringify(custom));
+  } catch (e) { /* storage unavailable — this session just won't persist across reload */ }
+}
+function bootstrapFromLocalStorage() {
+  for (const s of loadCustomStudents()) {
+    if (s && s.name && !NAMES.includes(s.name)) {
+      if (!s.location) s.location = DEFAULT_LOCATION; // students added before this feature existed
+      STUDENTS.push(s);
+      NAMES.push(s.name);
+      DEFAULT_GRADES[s.name] = 5;
+    }
+  }
+  STUDENTS.forEach(s => registerLocation(s.location));
+}
+
+// ---------------------------------------------------------------------------
+// Real cross-device saving via Supabase (a small hosted Postgres database).
+// One row (id=1) in the `app_state` table holds the whole app's editable
+// state as JSON — roster, grades, wages, locations, fixed schedules, class
+// blocks, and budget/policy/hours settings. Anyone who opens this page sees
+// the same saved state, on any device — it's not per-browser anymore.
+//
+// Fill in SUPABASE_URL and SUPABASE_ANON_KEY below (Supabase dashboard ->
+// Project Settings -> API). The anon key is meant to be public/embedded in
+// client-side code like this — it's not a secret — access is governed by the
+// table's row-level-security policies, not by hiding this key.
+// ---------------------------------------------------------------------------
+const SUPABASE_URL = 'https://vnbmpbsuxvhlbudcfwre.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_-WVQcD1LsxqTae6l7gAtkQ_eJ-oc4Qr'; // the "anon public" key
+const SUPABASE_TABLE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/app_state';
+const SUPABASE_AUTH_URL = SUPABASE_URL.replace(/\/$/, '') + '/auth/v1';
+// The one account allowed to save. Must match the email in the Supabase RLS
+// policies on app_state (see the SQL comment near saveState below) — changing
+// one without the other either locks you out or silently stops enforcing
+// anything client-side (the database policy is still the real backstop).
+const ADMIN_EMAIL = 'paulwise@me.com';
+const supabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY
+  && !SUPABASE_URL.startsWith('YOUR_') && !SUPABASE_ANON_KEY.startsWith('YOUR_'));
+let lastSavedAt = null;
+
+function supabaseHeaders(extra) {
+  return Object.assign({
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+    'Content-Type': 'application/json',
+  }, extra || {});
+}
+
+// ---------------------------------------------------------------------------
+// Sign-in (Supabase Auth, email magic link) — gates the Save button only.
+// Anyone with the page link can view and drag sliders freely (that's all
+// local, no server call); only a signed-in session can write to the shared
+// database. The actual enforcement lives in Supabase's row-level-security
+// policies on app_state (insert/update require a matching authenticated
+// email) — this client-side gating is just the matching UI, not the
+// security boundary itself.
+//
+// Implemented with plain fetch() against Supabase's Auth REST endpoints
+// rather than the @supabase/supabase-js library, so this file stays a
+// single dependency-free HTML file.
+// ---------------------------------------------------------------------------
+const AUTH_SESSION_KEY = 'pstcc_shift_console_auth_v1';
+let authSession = null; // { access_token, refresh_token, expires_at, email } | null
+
+function decodeJwtEmail(token) {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(payload));
+    return json.email || null;
+  } catch (e) { return null; }
+}
+function setAuthSession(data) {
+  if (!data || !data.access_token) { clearAuthSession(); return; }
+  const expires_at = data.expires_at || (Math.floor(Date.now() / 1000) + (Number(data.expires_in) || 3600));
+  authSession = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token || (authSession && authSession.refresh_token) || null,
+    expires_at,
+    email: decodeJwtEmail(data.access_token),
+  };
+  try { localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(authSession)); } catch (e) {}
+}
+function clearAuthSession() {
+  authSession = null;
+  try { localStorage.removeItem(AUTH_SESSION_KEY); } catch (e) {}
+}
+function loadStoredAuthSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (raw) authSession = JSON.parse(raw);
+  } catch (e) { authSession = null; }
+}
+// Picks up the #access_token=...&refresh_token=... fragment Supabase redirects
+// back to after the user clicks their magic-link email, then scrubs it from
+// the address bar so the token doesn't linger in browser history.
+function consumeAuthRedirect() {
+  if (!window.location.hash || window.location.hash.length < 2) return false;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const access_token = params.get('access_token');
+  if (!access_token) return false;
+  setAuthSession({
+    access_token,
+    refresh_token: params.get('refresh_token'),
+    expires_in: params.get('expires_in'),
+  });
+  const cleanUrl = window.location.pathname + window.location.search;
+  window.history.replaceState({}, document.title, cleanUrl);
+  return true;
+}
+// Refreshes the access token if it's missing or close to expiring. Returns
+// true when a usable (fresh) session is available afterward.
+async function ensureFreshSession() {
+  if (!authSession) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (authSession.expires_at && authSession.expires_at - now > 60) return true;
+  if (!authSession.refresh_token) { clearAuthSession(); return false; }
+  try {
+    const resp = await fetch(SUPABASE_AUTH_URL + '/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: authSession.refresh_token }),
+    });
+    if (!resp.ok) throw new Error('refresh failed: HTTP ' + resp.status);
+    setAuthSession(await resp.json());
+    return true;
+  } catch (e) {
+    clearAuthSession();
+    return false;
+  }
+}
+async function requestMagicLink(email) {
+  const msg = document.getElementById('loginMsg');
+  if (!email) { if (msg) msg.textContent = 'Enter an email address.'; return; }
+  if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    // Not a security boundary (the RLS policy is) — just avoids creating a
+    // stray Supabase account and a confusing "signed in but Save still
+    // fails" experience for anyone who tries this by mistake.
+    if (msg) msg.textContent = 'Only the admin account can sign in here.';
+    return;
+  }
+  if (msg) msg.textContent = 'Sending…';
+  try {
+    const resp = await fetch(SUPABASE_AUTH_URL + '/otp', {
+      method: 'POST',
+      headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        create_user: true,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname },
+      }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new Error('HTTP ' + resp.status + (text ? ': ' + text.slice(0, 200) : ''));
+    }
+    if (msg) msg.textContent = 'Check your email for a sign-in link.';
+  } catch (e) {
+    if (msg) msg.textContent = 'Could not send link (' + (e && e.message ? e.message : 'error') + ').';
+  }
+}
+function updateAuthUI() {
+  const authStatus = document.getElementById('authStatus');
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  // Fails safe: grade/wage/payroll stay masked (see the .admin-only / .viewer-mask
+  // rules) unless this ends up true. Set before the early returns below so a
+  // misconfigured or not-yet-loaded page never accidentally shows them.
+  document.body.classList.toggle('is-admin', isAdminSignedIn());
+  if (!authStatus || !loginBtn || !logoutBtn) return;
+  if (!supabaseConfigured) { authStatus.textContent = ''; loginBtn.hidden = true; logoutBtn.hidden = true; return; }
+  if (authSession && authSession.email) {
+    const isAdmin = authSession.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    authStatus.textContent = isAdmin
+      ? `Signed in as ${authSession.email}`
+      : `Signed in as ${authSession.email} (read-only — not the admin account)`;
+    loginBtn.hidden = true;
+    logoutBtn.hidden = false;
+  } else {
+    authStatus.textContent = 'Viewing (read-only)';
+    loginBtn.hidden = false;
+    logoutBtn.hidden = true;
+  }
+}
+function isAdminSignedIn() {
+  return !!(authSession && authSession.email && authSession.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+}
+function wireAuthControls() {
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const loginPanel = document.getElementById('loginPanel');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginSendBtn = document.getElementById('loginSendBtn');
+  const loginCancelBtn = document.getElementById('loginCancelBtn');
+  const loginMsg = document.getElementById('loginMsg');
+  if (loginBtn && loginPanel) loginBtn.addEventListener('click', () => {
+    loginPanel.hidden = false;
+    if (loginMsg) loginMsg.textContent = '';
+    if (loginEmail) loginEmail.focus();
+  });
+  if (loginCancelBtn && loginPanel) loginCancelBtn.addEventListener('click', () => { loginPanel.hidden = true; });
+  if (loginSendBtn) loginSendBtn.addEventListener('click', () => requestMagicLink((loginEmail && loginEmail.value || '').trim()));
+  if (loginEmail) loginEmail.addEventListener('keydown', e => { if (e.key === 'Enter') requestMagicLink(loginEmail.value.trim()); });
+  if (logoutBtn) logoutBtn.addEventListener('click', () => { clearAuthSession(); updateAuthUI(); updateSaveUI(); });
+}
+
+function currentStateSnapshot() {
+  const grades = {}, wages = {};
+  for (const n of NAMES) {
+    grades[n] = num('grade_' + slug(n), DEFAULT_GRADES[n] ?? 5);
+    wages[n] = Math.max(0, num('wage_' + slug(n), DEFAULT_WAGE));
+  }
+  const byId = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    students: STUDENTS.map(s => JSON.parse(JSON.stringify(s))),
+    grades, wages,
+    knownLocations: [...KNOWN_LOCATIONS],
+    settings: {
+      fallBudget: byId('fallBudget'), usableWeeks: byId('usableWeeks'),
+      weeklyCap: byId('weeklyCap'), minShift: byId('minShift'), maxConcurrent: byId('maxConcurrent'),
+      openTime: byId('openTime'), closeTime: byId('closeTime'),
+    },
+  };
+}
+function applyLoadedState(state) {
+  if (!state || !Array.isArray(state.students) || !state.students.length) return false;
+  STUDENTS.length = 0;
+  STUDENTS.push(...state.students.map(s => ({ ...s, availability: s.availability || [], classes: s.classes || [] })));
+  NAMES.length = 0;
+  NAMES.push(...STUDENTS.map(s => s.name));
+  for (const n of NAMES) {
+    DEFAULT_GRADES[n] = (state.grades && state.grades[n] != null) ? state.grades[n] : (DEFAULT_GRADES[n] ?? 5);
+    WAGES[n] = (state.wages && state.wages[n] != null) ? state.wages[n] : DEFAULT_WAGE;
+  }
+  if (Array.isArray(state.knownLocations)) state.knownLocations.forEach(registerLocation);
+  STUDENTS.forEach(s => registerLocation(s.location));
+  lastSavedAt = state.savedAt || null;
+  return true;
+}
+function applySettingsToInputs(settings) {
+  if (!settings) return;
+  const setIfPresent = (id, v) => { if (v !== undefined && v !== null && v !== '') { const el = document.getElementById(id); if (el) el.value = v; } };
+  ['fallBudget', 'usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent', 'openTime', 'closeTime']
+    .forEach(id => setIfPresent(id, settings[id]));
+}
+async function loadSavedState() {
+  if (!supabaseConfigured) return null;
+  try {
+    const resp = await fetch(SUPABASE_TABLE_URL + '?id=eq.1&select=data,updated_at', {
+      headers: supabaseHeaders({ Accept: 'application/vnd.pgrst.object+json' }),
+      cache: 'no-store',
+    });
+    if (!resp.ok) return null; // no row saved yet (406), or a real problem — either way, fall back to defaults
+    const row = await resp.json();
+    return (row && row.data) ? row.data : null;
+  } catch (e) { return null; }
+}
+function updateSaveUI() {
+  const btn = document.getElementById('saveBtn');
+  const status = document.getElementById('saveStatus');
+  if (!btn || !status) return;
+  if (!supabaseConfigured) {
+    btn.hidden = true;
+    status.textContent = 'Saving is not configured yet — add your Supabase URL and key to this file.';
+    return;
+  }
+  const signedIn = isAdminSignedIn();
+  btn.hidden = !signedIn;
+  if (signedIn) {
+    status.textContent = lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleString()}` : 'Not saved yet';
+  } else {
+    status.textContent = lastSavedAt ? `Last saved ${new Date(lastSavedAt).toLocaleString()} — sign in to save changes.` : '';
+  }
+}
+async function saveState() {
+  const btn = document.getElementById('saveBtn');
+  const status = document.getElementById('saveStatus');
+  if (!supabaseConfigured) return;
+  const fresh = await ensureFreshSession();
+  updateAuthUI();
+  if (!fresh || !isAdminSignedIn()) {
+    updateSaveUI();
+    status.textContent = fresh ? 'This account cannot save changes.' : 'Your sign-in expired — sign in again to save.';
+    return;
+  }
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+  const snapshot = currentStateSnapshot();
+  try {
+    const resp = await fetch(SUPABASE_TABLE_URL + '?on_conflict=id', {
+      method: 'POST',
+      headers: supabaseHeaders({
+        Authorization: 'Bearer ' + authSession.access_token,
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      }),
+      body: JSON.stringify({ id: 1, data: snapshot, updated_at: snapshot.savedAt }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new Error('HTTP ' + resp.status + (text ? ': ' + text.slice(0, 200) : ''));
+    }
+    lastSavedAt = snapshot.savedAt;
+    status.textContent = `Saved ${new Date(lastSavedAt).toLocaleString()}`;
+  } catch (e) {
+    status.textContent = 'Save failed — check your connection and try again. (' + (e && e.message ? e.message : 'error') + ')';
+  } finally {
+    btn.disabled = false;
+  }
+}
+async function boot() {
+  if (!consumeAuthRedirect()) loadStoredAuthSession();
+  await ensureFreshSession();
+
+  const loaded = await loadSavedState();
+
+  if (loaded && applyLoadedState(loaded)) {
+    // Saved state is the source of truth — legacy localStorage is not consulted.
+  } else {
+    bootstrapFromLocalStorage();
+    for (const n of NAMES) WAGES[n] = DEFAULT_WAGE;
+  }
+
+  buildHourSelects();
+  if (loaded) applySettingsToInputs(loaded.settings);
+  buildFaders();
+  wireControls();
+  wireAuthControls();
+  updateAuthUI();
+  updateSaveUI();
+  renderAll();
+}
+
+// Categorical color assignment for the slice-view grid: stable per student, in
+// the order students first appear — never reassigned when the roster changes,
+// so adding or removing a student never repaints anyone else's color.
+const STUDENT_COLOR_ORDER = [...NAMES];
+function colorIndexFor(name) {
+  let i = STUDENT_COLOR_ORDER.indexOf(name);
+  if (i === -1) { STUDENT_COLOR_ORDER.push(name); i = STUDENT_COLOR_ORDER.length - 1; }
+  return i % 8;
+}
+function seriesVar(name) { return `var(--series-${colorIndexFor(name) + 1})`; }
+
+// Compact label for narrow slice-view blocks: first name alone, or "First L." when
+// another student on the roster shares that first name (e.g. the two Tylers).
+function shortLabel(name) {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0];
+  const last = parts.length > 1 ? parts[parts.length - 1] : '';
+  const collides = NAMES.some(n => n !== name && n.trim().split(/\s+/)[0] === first);
+  return (collides && last) ? `${first} ${last[0]}.` : first;
+}
+
+// ---------------------------------------------------------------------------
+// Solver (ported 1:1 from the workbook's Python build_schedule.py — verified
+// to reproduce identical output on the same inputs)
+// ---------------------------------------------------------------------------
+function round4(x) { return Math.round(x * 10000) / 10000; }
+
+function buildBlocks(students, excludeDays, deptStart, deptEnd) {
+  // Clips each stated availability block to the department's open-hours window
+  // (deptStart/deptEnd). Narrowing the window correctly reduces a block's usable
+  // duration (or drops it entirely if it falls outside the window); widening the
+  // window can't invent availability the student never reported, so it only has an
+  // effect where their stated hours already extend past 9-5.
+  //
+  // Fixed-schedule students are the one exception: their hours are an external hard
+  // commitment (assigned by someone else, sometimes in a different building), so they
+  // are never clipped to this department's open-hours slider.
+  if (deptStart === undefined) deptStart = WINDOW_START;
+  if (deptEnd === undefined) deptEnd = WINDOW_END;
+  const out = [];
+  for (const s of students) {
+    for (const a of s.availability) {
+      if (excludeDays.includes(a.day)) continue;
+      let start, end;
+      if (s.fixed) {
+        start = a.start;
+        end = a.end;
+      } else {
+        start = Math.max(a.start, deptStart);
+        end = Math.min(a.end, deptEnd);
+      }
+      if (end - start <= 1e-9) continue;
+      out.push({ student: s.name, day: a.day, start, orig: round4(end - start), location: s.location || DEFAULT_LOCATION });
+    }
+  }
+  return out;
+}
+
+function allocateStudentBlocks(dayBlocks, goalHours, minShift) {
+  const usable = dayBlocks.filter(b => b.orig >= minShift - 1e-9);
+  const totalUsable = usable.reduce((a, b) => a + b.orig, 0);
+  if (totalUsable <= 0 || goalHours <= 0) return [];
+  const ratio = Math.min(1, goalHours / totalUsable);
+  let allocated = [];
+  for (const b of usable) {
+    let dur = b.orig * ratio;
+    dur = Math.round(dur * 4) / 4;
+    if (dur < minShift) dur = minShift;
+    dur = Math.min(dur, Math.round(b.orig * 4) / 4);
+    if (dur >= minShift - 1e-9) allocated.push({ day: b.day, start: b.start, orig: b.orig, dur, location: b.location });
+  }
+  let total = allocated.reduce((a, b) => a + b.dur, 0);
+  let guard = 0;
+  while (total - goalHours > 0.125 && allocated.length && guard < 200) {
+    guard++;
+    let idx = 0;
+    for (let i = 1; i < allocated.length; i++) if (allocated[i].dur > allocated[idx].dur) idx = i;
+    if (allocated[idx].dur - 0.25 >= minShift - 1e-9) { allocated[idx].dur -= 0.25; total -= 0.25; }
+    else break;
+  }
+  return allocated;
+}
+
+function scheduleDay(items, maxConcurrent) {
+  const nSlots = Math.round((WINDOW_END - WINDOW_START) / SLOT);
+  const occ = new Array(nSlots).fill(0);
+  const idx = t => Math.max(0, Math.min(Math.round((t - WINDOW_START) / SLOT), nSlots));
+  const ordered = items.slice().sort((a, b) => (a.orig - a.dur) - (b.orig - b.dur) || a.start - b.start);
+  const placed = [];
+  for (const b of ordered) {
+    const durSlots = Math.max(1, Math.round(b.dur / SLOT));
+    const wStartIdx = idx(b.start);
+    const wEndIdx = idx(b.start + b.orig);
+    const maxStartIdx = Math.max(wStartIdx, wEndIdx - durSlots);
+    const origStartIdx = idx(b.start);
+    const candidates = [];
+    for (let s = wStartIdx; s <= maxStartIdx; s++) candidates.push(s);
+    candidates.sort((a, c) => Math.abs(a - origStartIdx) - Math.abs(c - origStartIdx));
+    let best = null;
+    for (const s of candidates) {
+      let peak = 0;
+      for (let i = s; i < s + durSlots; i++) peak = Math.max(peak, occ[i]);
+      if (peak < maxConcurrent) { best = s; break; }
+    }
+    let forced = false;
+    if (best === null) {
+      forced = true;
+      let bestScore = Infinity;
+      for (const s of candidates) {
+        let peak = 0;
+        for (let i = s; i < s + durSlots; i++) peak = Math.max(peak, occ[i]);
+        const score = peak * 1000 + Math.abs(s - origStartIdx);
+        if (score < bestScore) { bestScore = score; best = s; }
+      }
+    }
+    for (let i = best; i < best + durSlots; i++) occ[i]++;
+    placed.push({ ...b, schedStart: WINDOW_START + best * SLOT, forced });
+  }
+  return { placed, occ };
+}
+
+// Hard budget ceiling: the per-student weighted targets can, in theory, never sum to
+// more than the weekly rate - but the 1-hour minimum-shift floor can bump individual
+// blocks up past their fair share, and that can push the AGGREGATE over budget. This
+// trims it back down, protecting higher-graded (higher-weight) students first: first by
+// shaving 0.25h off the lowest-weight students' blocks (never below the minimum shift),
+// then - if still over - dropping whole blocks (lowest-weight, smallest-first) until the
+// total is back at or under the cap. Never exceeds the cap; may land a bit under it,
+// since whole-block drops can't be split.
+function enforceBudgetCap(allocated, weight, minShift, cap) {
+  let total = allocated.reduce((a, b) => a + b.dur, 0);
+  if (total <= cap + 1e-6) return { allocated, trimmed: false, droppedStudents: [] };
+  const order = [...allocated].sort((a, b) => weight[a.student] - weight[b.student]);
+  let progress = true;
+  while (total - cap > 1e-6 && progress) {
+    progress = false;
+    for (const item of order) {
+      if (total - cap <= 1e-6) break;
+      if (item.dur - 0.25 >= minShift - 1e-9) { item.dur -= 0.25; total -= 0.25; progress = true; }
+    }
+  }
+  if (total - cap > 1e-6) {
+    const remaining = allocated.filter(b => b.dur > 0)
+      .sort((a, b) => weight[a.student] - weight[b.student] || a.dur - b.dur);
+    for (const item of remaining) {
+      if (total - cap <= 1e-6) break;
+      total -= item.dur;
+      item.dur = 0;
+    }
+  }
+  const kept = allocated.filter(b => b.dur > 1e-9);
+  const keptStudents = new Set(kept.map(b => b.student));
+  const droppedStudents = [...new Set(allocated.map(b => b.student))].filter(s => !keptStudents.has(s));
+  return { allocated: kept, trimmed: true, droppedStudents };
+}
+
+function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap, fixedNames) {
+  fixedNames = fixedNames || new Set();
+  const byStudent = {};
+  for (const b of blocks) (byStudent[b.student] ??= []).push(b);
+  let allAllocated = [];
+  let fixedAllocated = [];
+  for (const [student, blist] of Object.entries(byStudent)) {
+    if (fixedNames.has(student)) {
+      // Hard schedule: every stated block is honored in full, exactly as entered —
+      // never proportionally shaved by grade weighting, never touched by budget trimming.
+      for (const b of blist) fixedAllocated.push({ student, day: b.day, start: b.start, orig: b.orig, dur: b.orig, location: b.location });
+      continue;
+    }
+    const allocated = allocateStudentBlocks(blist, goals[student] || 0, minShift);
+    for (const a of allocated) allAllocated.push({ student, ...a });
+  }
+  const capResult = enforceBudgetCap(allAllocated, weight, minShift, budgetCap);
+  allAllocated = capResult.allocated.concat(fixedAllocated);
+
+  // Group by (day, location) — not just day — so the concurrency cap is enforced
+  // per physical room. Two people scheduled at the same time in different
+  // buildings never compete for the same slots.
+  const byGroup = {};
+  for (const a of allAllocated) {
+    const key = a.day + '|||' + (a.location || DEFAULT_LOCATION);
+    (byGroup[key] ??= []).push(a);
+  }
+  const rows = [], conflictDays = [];
+  for (const [key, items] of Object.entries(byGroup)) {
+    const [day, location] = key.split('|||');
+    const { placed, occ } = scheduleDay(items, maxConcurrent);
+    if (occ.length && Math.max(...occ) > maxConcurrent) conflictDays.push({ day, location });
+    rows.push(...placed);
+  }
+  return { rows, conflictDays, trimmed: capResult.trimmed, droppedStudents: capResult.droppedStudents };
+}
+
+function recompute() {
+  const fallBudget = num('fallBudget', 800);
+  const usableWeeks = Math.max(1, num('usableWeeks', 13));
+  const weeklyCap = num('weeklyCap', 20);
+  const minShift = num('minShift', 1);
+  const maxConcurrent = Math.max(1, Math.round(num('maxConcurrent', 3)));
+  const weeklyRate = fallBudget / usableWeeks;
+
+  WINDOW_START = num('openTime', 9.0);
+  WINDOW_END = num('closeTime', 17.0);
+  WINDOW_START = Math.min(Math.max(WINDOW_START, HOURS_MIN), HOURS_MAX - 0.5);
+  WINDOW_END = Math.min(Math.max(WINDOW_END, HOURS_MIN + 0.5), HOURS_MAX);
+  if (WINDOW_END - WINDOW_START < 0.5) WINDOW_END = WINDOW_START + 0.5;
+
+  // Department open-hours window — governs how much of a FLEXIBLE student's stated
+  // availability is usable. Captured before any widening below.
+  const deptStart = WINDOW_START, deptEnd = WINDOW_END;
+
+  const grades = {};
+  for (const n of NAMES) grades[n] = num('grade_' + slug(n), DEFAULT_GRADES[n]);
+
+  const fixedNames = new Set(NAMES.filter(isFixedStudent));
+  const totalGrade = NAMES.reduce((a, n) => a + (fixedNames.has(n) ? 0 : grades[n]), 0) || 1;
+
+  // A fixed schedule is an external hard commitment and can fall outside the
+  // department's own open hours (different building, different arrangement) — widen
+  // the shared solving/display window (WINDOW_START/END) to cover it, so it's never
+  // clipped or mis-plotted on the grid. This never changes deptStart/deptEnd above,
+  // so it has no effect on what flexible students can be offered.
+  for (const n of fixedNames) {
+    const s = STUDENTS.find(x => x.name === n);
+    for (const a of (s && s.availability) || []) {
+      WINDOW_START = Math.min(WINDOW_START, a.start);
+      WINDOW_END = Math.max(WINDOW_END, a.end);
+    }
+  }
+  WINDOW_START = Math.max(WINDOW_START, HOURS_MIN);
+  WINDOW_END = Math.min(WINDOW_END, HOURS_MAX);
+
+  const wages = {};
+  for (const n of NAMES) wages[n] = Math.max(0, num('wage_' + slug(n), DEFAULT_WAGE));
+
+  const locations = {};
+  for (const n of NAMES) locations[n] = locationOf(n);
+  const activeLocations = [...new Set(NAMES.map(n => locations[n]))];
+
+  const blocksWithFri = buildBlocks(STUDENTS, [], deptStart, deptEnd);
+  const blocksNoFri = buildBlocks(STUDENTS, ['Friday'], deptStart, deptEnd);
+  const capWithFri = {}, capNoFri = {};
+  for (const n of NAMES) { capWithFri[n] = 0; capNoFri[n] = 0; }
+  for (const b of blocksWithFri) capWithFri[b.student] += b.orig;
+  for (const b of blocksNoFri) capNoFri[b.student] += b.orig;
+
+  // Fixed-schedule students draw their exact stated hours off the top of the shared
+  // weekly pool before grade weighting splits what's left among everyone else — a hard
+  // schedule never competes for budget on equal footing, it's honored first.
+  const fixedHoursWithFri = [...fixedNames].reduce((a, n) => a + capWithFri[n], 0);
+  const fixedHoursNoFri = [...fixedNames].reduce((a, n) => a + capNoFri[n], 0);
+  const flexRateWithFri = Math.max(0, weeklyRate - fixedHoursWithFri);
+  const flexRateNoFri = Math.max(0, weeklyRate - fixedHoursNoFri);
+
+  const weight = {}, rawTarget = {}, cappedTarget = {}, goalNoFri = {};
+  for (const n of NAMES) {
+    if (fixedNames.has(n)) {
+      weight[n] = 0;
+      rawTarget[n] = capWithFri[n];
+      cappedTarget[n] = capWithFri[n];
+      goalNoFri[n] = capNoFri[n];
+    } else {
+      weight[n] = grades[n] / totalGrade;
+      rawTarget[n] = weight[n] * flexRateWithFri;
+      cappedTarget[n] = Math.min(rawTarget[n], capWithFri[n], weeklyCap);
+      goalNoFri[n] = Math.min(weight[n] * flexRateNoFri, capNoFri[n], weeklyCap);
+    }
+  }
+
+  const withFri = buildScenario(blocksWithFri, cappedTarget, weight, minShift, maxConcurrent, flexRateWithFri, fixedNames);
+  const noFri = buildScenario(blocksNoFri, goalNoFri, weight, minShift, maxConcurrent, flexRateNoFri, fixedNames);
+
+  const schedWithFri = {}, schedNoFri = {};
+  for (const n of NAMES) { schedWithFri[n] = 0; schedNoFri[n] = 0; }
+  for (const r of withFri.rows) schedWithFri[r.student] += r.dur;
+  for (const r of noFri.rows) schedNoFri[r.student] += r.dur;
+
+  const weeklyCostWithFri = {}, weeklyCostNoFri = {}, semesterCostWithFri = {};
+  for (const n of NAMES) {
+    weeklyCostWithFri[n] = schedWithFri[n] * wages[n];
+    weeklyCostNoFri[n] = schedNoFri[n] * wages[n];
+    semesterCostWithFri[n] = weeklyCostWithFri[n] * usableWeeks;
+  }
+
+  return {
+    fallBudget, usableWeeks, weeklyCap, minShift, maxConcurrent, weeklyRate, grades, totalGrade,
+    windowStart: WINDOW_START, windowEnd: WINDOW_END,
+    capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
+    withFri, noFri, schedWithFri, schedNoFri,
+    wages, weeklyCostWithFri, weeklyCostNoFri, semesterCostWithFri,
+    locations, activeLocations, fixedNames,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+function num(id, fallback) {
+  const el = document.getElementById(id);
+  if (!el) return fallback;
+  const v = parseFloat(el.value);
+  return Number.isFinite(v) ? v : fallback;
+}
+function slug(name) { return name.toLowerCase().replace(/[^a-z0-9]+/g, '_'); }
+function fmtClock(dec) {
+  let h = Math.floor(dec), m = Math.round((dec - h) * 60);
+  if (m === 60) { h += 1; m = 0; }
+  const period = h >= 12 ? 'pm' : 'am';
+  let h12 = h % 12; if (h12 === 0) h12 = 12;
+  return m === 0 ? `${h12}${period}` : `${h12}:${String(m).padStart(2, '0')}${period}`;
+}
+function fmtRange(a, b) { return `${fmtClock(a)}-${fmtClock(b)}`; }
+function fmtHourAxis(dec) {
+  const h = Math.floor(dec), period = h >= 12 ? 'PM' : 'AM';
+  let h12 = h % 12; if (h12 === 0) h12 = 12;
+  return `${h12}:00 ${period}`;
+}
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+// ---------------------------------------------------------------------------
+// Rendering: fader sidebar
+// ---------------------------------------------------------------------------
+function buildHourSelects() {
+  const opts = [];
+  for (let t = HOURS_MIN; t <= HOURS_MAX + 1e-9; t += 0.5) opts.push(round4(t));
+  const openSel = document.getElementById('openTime');
+  const closeSel = document.getElementById('closeTime');
+  openSel.innerHTML = opts.map(t => `<option value="${t}"${t === WINDOW_START ? ' selected' : ''}>${fmtClock(t)}</option>`).join('');
+  closeSel.innerHTML = opts.map(t => `<option value="${t}"${t === WINDOW_END ? ' selected' : ''}>${fmtClock(t)}</option>`).join('');
+  const validate = () => {
+    let o = parseFloat(openSel.value), c = parseFloat(closeSel.value);
+    if (c - o < 0.5) {
+      // whichever the user just moved wins; nudge the other one out of the way
+      if (document.activeElement === openSel) { c = Math.min(o + 0.5, HOURS_MAX); closeSel.value = c; }
+      else { o = Math.max(c - 0.5, HOURS_MIN); openSel.value = o; }
+    }
+  };
+  openSel.addEventListener('change', () => { validate(); renderAll(); });
+  closeSel.addEventListener('change', () => { validate(); renderAll(); });
+}
+
+function locationOptionsHTML(selected) {
+  return KNOWN_LOCATIONS.map(l => `<option value="${esc(l)}"${l === selected ? ' selected' : ''}>${esc(l)}</option>`).join('')
+    + `<option value="__other__">+ New location…</option>`;
+}
+function isFixedStudent(name) {
+  const s = STUDENTS.find(x => x.name === name);
+  return !!(s && s.fixed);
+}
+function fixedBlockListMarkup(n) {
+  const s = STUDENTS.find(x => x.name === n);
+  const items = ((s && s.availability) || []).map((b, i) => ({ ...b, i }))
+    .sort((a, b) => ALL_DAYS.indexOf(a.day) - ALL_DAYS.indexOf(b.day) || a.start - b.start);
+  return items.map(b =>
+    `<li><span>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span><button type="button" class="rm-btn" data-i="${b.i}">×</button></li>`
+  ).join('');
+}
+function classTypeOptionsHTML(selected) {
+  return ['Class', 'Internship', 'Outside Job']
+    .map(t => `<option value="${t}"${t === selected ? ' selected' : ''}>${t}</option>`).join('');
+}
+function classBlockListMarkup(n) {
+  const s = STUDENTS.find(x => x.name === n);
+  const items = ((s && s.classes) || []).map((c, i) => ({ ...c, i }))
+    .sort((a, b) => ALL_DAYS.indexOf(a.day) - ALL_DAYS.indexOf(b.day) || a.start - b.start);
+  return items.map(c =>
+    `<li><span>${esc(c.day)} ${esc(c.course || c.type)} ${fmtClock(c.start)}–${fmtClock(c.end)}</span><button type="button" class="rm-btn" data-i="${c.i}">×</button></li>`
+  ).join('');
+}
+function faderMarkup(n, g, wage) {
+  const id = 'grade_' + slug(n);
+  const wageId = 'wage_' + slug(n);
+  const locId = 'loc_' + slug(n);
+  const fixId = 'fixed_' + slug(n);
+  const clsId = 'classes_' + slug(n);
+  const fixed = isFixedStudent(n);
+  const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
+  const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
+  return `<div class="fader${fixed ? ' is-fixed' : ''}" data-student="${esc(n)}">
+      <div class="fader-top">
+        <span class="fader-name">${esc(n)}</span>
+        <span class="fader-value admin-only" id="${id}_val">${g}</span>
+        <span class="fader-value-lock viewer-mask">🔒</span>
+      </div>
+      <div class="fader-track admin-only">
+        <input type="range" id="${id}" min="0" max="10" step="1" value="${g}" style="--fill:${g / 10 * 100}%">
+      </div>
+      <div class="fader-track-lock viewer-mask">Grade — admin only</div>
+      <div class="fader-bottom">
+        <span class="fader-weight admin-only" id="${id}_weight"></span>
+        <span class="fader-weight-lock viewer-mask">Weight — admin only</span>
+        <span class="fader-wage admin-only"><input type="number" id="${wageId}" value="${wage.toFixed(2)}" min="0" step="0.05">/hr</span>
+        <span class="fader-wage-lock viewer-mask">🔒 /hr</span>
+      </div>
+      <div class="fader-location">
+        <select id="${locId}" class="loc-select">${locationOptionsHTML(locationOf(n))}</select>
+        <input type="text" id="${locId}_other" class="loc-other-input" placeholder="New location name — Enter to confirm" hidden>
+      </div>
+      <div class="fader-fixed">
+        <label class="fixed-toggle">
+          <input type="checkbox" id="${fixId}"${fixed ? ' checked' : ''}>
+          <span>Fixed schedule — exact hard hours, skips grade weighting &amp; budget trimming</span>
+        </label>
+        <div class="fixed-editor" id="${fixId}_editor"${fixed ? '' : ' hidden'}>
+          <div class="block-row">
+            <select id="${fixId}_day">${dayOpts}</select>
+            <input type="time" id="${fixId}_start">
+            <input type="time" id="${fixId}_end">
+            <button type="button" class="add-block-btn" id="${fixId}_addBtn">+</button>
+          </div>
+          <ul class="block-list" id="${fixId}_list">${fixedBlockListMarkup(n)}</ul>
+        </div>
+      </div>
+      <details class="fader-classes">
+        <summary>Class / blocked-off schedule <span class="count-badge" id="${clsId}_count">(${classCount})</span></summary>
+        <div class="classes-editor">
+          <div class="block-row">
+            <select id="${clsId}_day">${dayOpts}</select>
+            <input type="text" id="${clsId}_course" placeholder="Course / name">
+            <input type="time" id="${clsId}_start">
+            <input type="time" id="${clsId}_end">
+            <select id="${clsId}_type">${classTypeOptionsHTML('Class')}</select>
+            <button type="button" class="add-block-btn" id="${clsId}_addBtn">+</button>
+          </div>
+          <ul class="block-list" id="${clsId}_list">${classBlockListMarkup(n)}</ul>
+        </div>
+      </details>
+    </div>`;
+}
+function setStudentLocation(name, loc) {
+  const s = STUDENTS.find(x => x.name === name);
+  if (s) s.location = loc;
+  if (!BASE_NAMES.has(name)) saveCustomStudents();
+  renderAll();
+}
+function refreshAllLocationSelects() {
+  document.querySelectorAll('.loc-select').forEach(sel => {
+    const studentName = sel.closest('.fader')?.dataset.student;
+    if (studentName) sel.innerHTML = locationOptionsHTML(locationOf(studentName));
+  });
+  const newLocSel = document.getElementById('newLocation');
+  if (newLocSel) {
+    const prior = newLocSel.value;
+    newLocSel.innerHTML = locationOptionsHTML(KNOWN_LOCATIONS.includes(prior) ? prior : DEFAULT_LOCATION);
+  }
+  refreshGridLocationSelects();
+}
+function wireFader(n) {
+  const id = 'grade_' + slug(n);
+  document.getElementById(id).addEventListener('input', e => {
+    document.getElementById(id + '_val').textContent = e.target.value;
+    e.target.style.setProperty('--fill', e.target.value / 10 * 100 + '%');
+    renderAll();
+  });
+  document.getElementById('wage_' + slug(n)).addEventListener('input', renderAll);
+
+  const locId = 'loc_' + slug(n);
+  const sel = document.getElementById(locId);
+  const otherInput = document.getElementById(locId + '_other');
+  sel.addEventListener('change', () => {
+    if (sel.value === '__other__') {
+      otherInput.hidden = false;
+      otherInput.value = '';
+      otherInput.focus();
+    } else {
+      setStudentLocation(n, sel.value);
+    }
+  });
+  otherInput.addEventListener('change', () => {
+    const val = otherInput.value.trim();
+    otherInput.hidden = true;
+    if (val) {
+      registerLocation(val);
+      setStudentLocation(n, val);
+      refreshAllLocationSelects();
+    } else {
+      sel.value = locationOf(n);
+    }
+  });
+
+  const fixId = 'fixed_' + slug(n);
+  const fixChk = document.getElementById(fixId);
+  const fixEditor = document.getElementById(fixId + '_editor');
+  const fixList = document.getElementById(fixId + '_list');
+  const faderEl = fixChk.closest('.fader');
+
+  const persistIfCustom = () => { if (!BASE_NAMES.has(n)) saveCustomStudents(); };
+  const refreshFixedList = () => { fixList.innerHTML = fixedBlockListMarkup(n); };
+
+  fixChk.addEventListener('change', () => {
+    const s = STUDENTS.find(x => x.name === n);
+    if (s) s.fixed = fixChk.checked;
+    fixEditor.hidden = !fixChk.checked;
+    faderEl.classList.toggle('is-fixed', fixChk.checked);
+    persistIfCustom();
+    renderAll();
+  });
+
+  document.getElementById(fixId + '_addBtn').addEventListener('click', () => {
+    const day = document.getElementById(fixId + '_day').value;
+    const startStr = document.getElementById(fixId + '_start').value;
+    const endStr = document.getElementById(fixId + '_end').value;
+    if (!startStr || !endStr) return;
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.availability = s.availability || [];
+    s.availability.push({ day, start, end });
+    persistIfCustom();
+    refreshFixedList();
+    renderAll();
+  });
+
+  fixList.addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.availability.splice(+e.target.dataset.i, 1);
+    persistIfCustom();
+    refreshFixedList();
+    renderAll();
+  });
+
+  const clsId = 'classes_' + slug(n);
+  const clsList = document.getElementById(clsId + '_list');
+  const clsCount = document.getElementById(clsId + '_count');
+  const refreshClassList = () => {
+    clsList.innerHTML = classBlockListMarkup(n);
+    const s = STUDENTS.find(x => x.name === n);
+    clsCount.textContent = `(${((s && s.classes) || []).length})`;
+  };
+
+  document.getElementById(clsId + '_addBtn').addEventListener('click', () => {
+    const day = document.getElementById(clsId + '_day').value;
+    const course = document.getElementById(clsId + '_course').value.trim();
+    const startStr = document.getElementById(clsId + '_start').value;
+    const endStr = document.getElementById(clsId + '_end').value;
+    const type = document.getElementById(clsId + '_type').value;
+    if (!startStr || !endStr) return;
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.classes = s.classes || [];
+    s.classes.push({ day, course: course || type, start, end, type });
+    persistIfCustom();
+    document.getElementById(clsId + '_course').value = '';
+    refreshClassList();
+    renderAll();
+  });
+
+  clsList.addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.classes.splice(+e.target.dataset.i, 1);
+    persistIfCustom();
+    refreshClassList();
+    renderAll();
+  });
+}
+function buildFaders() {
+  const wrap = document.getElementById('faderList');
+  wrap.innerHTML = NAMES.map(n => faderMarkup(n, DEFAULT_GRADES[n] ?? 5, WAGES[n] ?? DEFAULT_WAGE)).join('');
+  NAMES.forEach(wireFader);
+}
+// Appends one new fader without touching the DOM (and therefore the live values)
+// of any student already on screen — used when a student is added at runtime.
+function appendFader(n, g, wage) {
+  document.getElementById('faderList').insertAdjacentHTML('beforeend', faderMarkup(n, g, wage));
+  wireFader(n);
+}
+
+// ---------------------------------------------------------------------------
+// Rendering: Hours Plan table
+// ---------------------------------------------------------------------------
+function renderPlan(state) {
+  const byLoc = {};
+  NAMES.forEach(n => { (byLoc[state.locations[n]] ??= []).push(n); });
+  const locOrder = KNOWN_LOCATIONS.filter(l => byLoc[l]);
+
+  let bodyHtml = '';
+  for (const loc of locOrder) {
+    const names = byLoc[loc];
+    bodyHtml += `<tr class="location-row"><td colspan="11">${esc(loc)}</td></tr>`;
+    bodyHtml += names.map(n => {
+      const utilFri = state.capWithFri[n] ? state.schedWithFri[n] / state.capWithFri[n] * 100 : 0;
+      const utilNoFri = state.capNoFri[n] ? state.schedNoFri[n] / state.capNoFri[n] * 100 : 0;
+      const fixed = state.fixedNames && state.fixedNames.has(n);
+      return `<tr>
+        <td>${esc(n)}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}</td>
+        <td class="admin-only">${fixed ? '—' : state.grades[n]}</td>
+        <td class="admin-only">${fixed ? '—' : (state.weight[n] * 100).toFixed(1) + '%'}</td>
+        <td>${state.capWithFri[n].toFixed(2)}h</td>
+        <td>${state.cappedTarget[n].toFixed(2)}h</td>
+        <td>${state.schedWithFri[n].toFixed(2)}h</td>
+        <td>${utilBar(utilFri)}</td>
+        <td>${state.capNoFri[n].toFixed(2)}h</td>
+        <td>${state.schedNoFri[n].toFixed(2)}h</td>
+        <td>${utilBar(utilNoFri)}</td>
+        <td>${(state.schedWithFri[n] * state.usableWeeks).toFixed(1)}h</td>
+      </tr>`;
+    }).join('');
+    if (locOrder.length > 1) {
+      const sum = key => names.reduce((a, n) => a + state[key][n], 0);
+      const subSched = sum('schedWithFri');
+      bodyHtml += `<tr class="subtotal-row">
+        <td>${esc(loc)} subtotal</td><td></td><td></td>
+        <td>${sum('capWithFri').toFixed(2)}h</td><td>${sum('cappedTarget').toFixed(2)}h</td>
+        <td>${subSched.toFixed(2)}h</td><td></td>
+        <td>${sum('capNoFri').toFixed(2)}h</td><td>${sum('schedNoFri').toFixed(2)}h</td><td></td>
+        <td>${(subSched * state.usableWeeks).toFixed(1)}h</td>
+      </tr>`;
+    }
+  }
+
+  const totalSchedFri = NAMES.reduce((a, n) => a + state.schedWithFri[n], 0);
+  const totalCapped = NAMES.reduce((a, n) => a + state.cappedTarget[n], 0);
+  const unalloc = state.weeklyRate - totalSchedFri;
+
+  document.getElementById('planTableWrap').innerHTML = `
+    <table class="plan-table">
+      <thead><tr>
+        <th>Student</th><th class="admin-only">Grade</th><th class="admin-only">Weight %</th>
+        <th>Capacity (With-Fri)</th><th>Target (cap ${state.weeklyCap}h)</th>
+        <th>Scheduled — With-Fri</th><th>Utilization — With-Fri</th>
+        <th>Capacity (No-Fri)</th><th>Scheduled — No-Fri</th><th>Utilization — No-Fri</th>
+        <th>Semester (${state.usableWeeks}wk, With-Fri)</th>
+      </tr></thead>
+      <tbody>
+        ${bodyHtml}
+        <tr class="total-row">
+          <td>TOTAL — all locations</td><td></td><td>100.0%</td><td>${NAMES.reduce((a, n) => a + state.capWithFri[n], 0).toFixed(2)}h</td>
+          <td>${totalCapped.toFixed(2)}h</td><td>${totalSchedFri.toFixed(2)}h</td><td></td>
+          <td>${NAMES.reduce((a, n) => a + state.capNoFri[n], 0).toFixed(2)}h</td>
+          <td>${NAMES.reduce((a, n) => a + state.schedNoFri[n], 0).toFixed(2)}h</td><td></td>
+          <td>${(totalSchedFri * state.usableWeeks).toFixed(1)}h</td>
+        </tr>
+        <tr class="unalloc-row">
+          <td colspan="5">Unallocated / reserve weekly hours (weekly rate − actual scheduled, With-Fri, shared budget across all locations)</td>
+          <td colspan="6">${unalloc.toFixed(2)}h weekly &nbsp;·&nbsp; ${(unalloc * state.usableWeeks).toFixed(1)}h this semester</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+function utilBar(pct) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return `<span class="util-bar-wrap"><span class="util-bar"><span style="width:${clamped}%"></span></span>${pct.toFixed(0)}%</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering: Payroll table (hourly wage × scheduled hours)
+// ---------------------------------------------------------------------------
+function renderPayroll(state) {
+  const byLoc = {};
+  NAMES.forEach(n => { (byLoc[state.locations[n]] ??= []).push(n); });
+  const locOrder = KNOWN_LOCATIONS.filter(l => byLoc[l]);
+
+  let bodyHtml = '';
+  for (const loc of locOrder) {
+    const names = byLoc[loc];
+    bodyHtml += `<tr class="location-row"><td colspan="7">${esc(loc)}</td></tr>`;
+    bodyHtml += names.map(n => `<tr>
+        <td>${esc(n)}${state.fixedNames && state.fixedNames.has(n) ? ' <span class="fixed-badge">Fixed</span>' : ''}</td>
+        <td>$${state.wages[n].toFixed(2)}/hr</td>
+        <td>${state.schedWithFri[n].toFixed(2)}h</td>
+        <td>$${state.weeklyCostWithFri[n].toFixed(2)}</td>
+        <td>${state.schedNoFri[n].toFixed(2)}h</td>
+        <td>$${state.weeklyCostNoFri[n].toFixed(2)}</td>
+        <td>$${state.semesterCostWithFri[n].toFixed(2)}</td>
+      </tr>`).join('');
+    if (locOrder.length > 1) {
+      const sum = key => names.reduce((a, n) => a + state[key][n], 0);
+      bodyHtml += `<tr class="subtotal-row">
+        <td>${esc(loc)} subtotal</td><td></td>
+        <td>${sum('schedWithFri').toFixed(2)}h</td><td>$${sum('weeklyCostWithFri').toFixed(2)}</td>
+        <td>${sum('schedNoFri').toFixed(2)}h</td><td>$${sum('weeklyCostNoFri').toFixed(2)}</td>
+        <td>$${sum('semesterCostWithFri').toFixed(2)}</td>
+      </tr>`;
+    }
+  }
+
+  const totalWeeklyFri = NAMES.reduce((a, n) => a + state.weeklyCostWithFri[n], 0);
+  const totalWeeklyNoFri = NAMES.reduce((a, n) => a + state.weeklyCostNoFri[n], 0);
+  const totalSemesterFri = NAMES.reduce((a, n) => a + state.semesterCostWithFri[n], 0);
+  const totalSchedFri = NAMES.reduce((a, n) => a + state.schedWithFri[n], 0);
+  const totalSchedNoFri = NAMES.reduce((a, n) => a + state.schedNoFri[n], 0);
+
+  document.getElementById('payrollTableWrap').innerHTML = `
+    <table class="plan-table">
+      <thead><tr>
+        <th>Student</th><th>Hourly Wage</th>
+        <th>Sched Hrs/Wk (With-Fri)</th><th>Weekly $ (With-Fri)</th>
+        <th>Sched Hrs/Wk (No-Fri)</th><th>Weekly $ (No-Fri)</th>
+        <th>Semester $ (${state.usableWeeks}wk, With-Fri)</th>
+      </tr></thead>
+      <tbody>
+        ${bodyHtml}
+        <tr class="total-row">
+          <td>TOTAL — all locations</td><td></td>
+          <td>${totalSchedFri.toFixed(2)}h</td><td>$${totalWeeklyFri.toFixed(2)}</td>
+          <td>${totalSchedNoFri.toFixed(2)}h</td><td>$${totalWeeklyNoFri.toFixed(2)}</td>
+          <td>$${totalSemesterFri.toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering: combined weekly grid (rowspan table, mirrors the Excel version)
+// ---------------------------------------------------------------------------
+function renderCombinedGrid(containerId, rows, days, maxConcurrent) {
+  const nSlots = Math.round((WINDOW_END - WINDOW_START) / SLOT);
+  const eventsByDay = {};
+  days.forEach(d => eventsByDay[d] = []);
+  rows.forEach(r => { if (eventsByDay[r.day]) eventsByDay[r.day].push({ s: r.schedStart, e: r.schedStart + r.dur, student: r.student }); });
+
+  const segByDay = {};
+  const gapsByDay = {};
+  days.forEach(day => {
+    const events = eventsByDay[day];
+    let boundaries = new Set([WINDOW_START, WINDOW_END]);
+    events.forEach(e => { boundaries.add(e.s); boundaries.add(e.e); });
+    boundaries = [...boundaries].filter(b => b >= WINDOW_START - 1e-9 && b <= WINDOW_END + 1e-9).sort((a, b) => a - b);
+    const segs = []; const gaps = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const a = boundaries[i], b = boundaries[i + 1];
+      if (b - a <= 1e-9) continue;
+      const active = events.filter(e => e.s <= a + 1e-6 && e.e >= b - 1e-6).map(e => e.student);
+      const r1 = Math.round((a - WINDOW_START) / SLOT), r2 = Math.round((b - WINDOW_START) / SLOT) - 1;
+      segs.push({ r1, r2: Math.max(r1, r2), a, b, active });
+      if (!active.length) gaps.push([a, b]);
+    }
+    segByDay[day] = segs;
+    gapsByDay[day] = gaps;
+  });
+
+  let html = `<table class="grid-table"><thead><tr><th>Time</th>${days.map(d => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>`;
+  const segIdx = {}, spanEnd = {};
+  days.forEach(d => { segIdx[d] = 0; spanEnd[d] = -1; });
+  for (let i = 0; i < nSlots; i++) {
+    const t = WINDOW_START + i * SLOT;
+    const label = Math.abs((t % 1)) < 1e-6 ? fmtHourAxis(t) : '';
+    html += `<tr><td class="timecol">${label}</td>`;
+    for (const day of days) {
+      if (i <= spanEnd[day]) continue;
+      const seg = segByDay[day][segIdx[day]++];
+      spanEnd[day] = seg.r2;
+      const span = seg.r2 - seg.r1 + 1;
+      const n = seg.active.length;
+      const cls = n === 0 ? 'gap' : n === 1 ? 'n1' : n === 2 ? 'n2' : n === 3 ? 'n3' : 'over';
+      let label2 = n === 0 ? `No coverage<br>${fmtRange(seg.a, seg.b)}` : `${seg.active.map(esc).join('<br>')}<br>${fmtRange(seg.a, seg.b)}`;
+      if (n > maxConcurrent) label2 += '<br>⚠ over cap';
+      html += `<td class="cell ${cls}" rowspan="${span}">${label2}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+
+  html += `<div class="legend">
+    <span><i style="background:var(--accent-soft)"></i>1 scheduled</span>
+    <span><i style="background:color-mix(in srgb, var(--accent) 55%, var(--surface))"></i>2 overlapping</span>
+    <span><i style="background:var(--accent)"></i>3 overlapping (policy max)</span>
+    <span><i style="background:var(--alarm)"></i>4+ — exceeds cap</span>
+    <span><i style="background:var(--surface-2);border:1px solid var(--line)"></i>No coverage</span>
+  </div>`;
+
+  const gapLines = days.filter(d => gapsByDay[d].length).map(d =>
+    `<div><strong>${esc(d)}:</strong> ${gapsByDay[d].map(([a, b]) => fmtRange(a, b)).join('; ')}</div>`).join('');
+  if (gapLines) html += `<div class="gaps-note">Coverage gaps within ${fmtClock(WINDOW_START)}-${fmtClock(WINDOW_END)}:${gapLines}</div>`;
+
+  document.getElementById(containerId).innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering: concurrency "slice" grid — an alternative to the block/rowspan
+// grid above. Overlapping students split a day into side-by-side vertical
+// columns instead of listing names as stacked text in one merged cell.
+// ---------------------------------------------------------------------------
+function layoutDayEvents(events) {
+  // Standard calendar-style collision layout: chain overlapping events into
+  // groups, then greedily assign each event the first column whose previous
+  // occupant has already ended. For an interval graph this greedy coloring
+  // (processed in start-time order) always uses exactly as many columns as
+  // the true peak overlap — so totalCols is the real concurrency, not just
+  // an upper bound.
+  const sorted = events.slice().sort((a, b) => a.start - b.start || a.end - b.end);
+  const groups = [];
+  let current = null;
+  for (const ev of sorted) {
+    if (!current || ev.start >= current.groupEnd - 1e-9) {
+      current = { events: [], groupEnd: ev.end };
+      groups.push(current);
+    }
+    current.events.push(ev);
+    current.groupEnd = Math.max(current.groupEnd, ev.end);
+  }
+  const placed = [];
+  for (const g of groups) {
+    const colEndTimes = [];
+    for (const ev of g.events) {
+      let col = colEndTimes.findIndex(t => t <= ev.start + 1e-9);
+      if (col === -1) { col = colEndTimes.length; colEndTimes.push(ev.end); }
+      else colEndTimes[col] = ev.end;
+      ev._col = col;
+    }
+    const totalCols = colEndTimes.length;
+    for (const ev of g.events) placed.push({ ...ev, col: ev._col, totalCols });
+  }
+  return placed;
+}
+
+function renderSliceGrid(containerId, rows, days, maxConcurrent) {
+  const pxPerMin = 1.5;
+  const dayHeight = Math.round((WINDOW_END - WINDOW_START) * 60 * pxPerMin);
+  const hourPx = Math.round(60 * pxPerMin);
+
+  const eventsByDay = {};
+  days.forEach(d => eventsByDay[d] = []);
+  rows.forEach(r => {
+    if (eventsByDay[r.day]) eventsByDay[r.day].push({ start: r.schedStart, end: r.schedStart + r.dur, student: r.student });
+  });
+
+  let ticks = '';
+  for (let t = Math.ceil(WINDOW_START); t <= WINDOW_END; t++) {
+    ticks += `<div class="tick" style="top:${(t - WINDOW_START) * 60 * pxPerMin}px">${fmtHourAxis(t)}</div>`;
+  }
+
+  const dayCols = days.map(day => {
+    const placed = layoutDayEvents(eventsByDay[day]);
+    const blocks = placed.map(ev => {
+      const top = (ev.start - WINDOW_START) * 60 * pxPerMin;
+      const height = (ev.end - ev.start) * 60 * pxPerMin;
+      const widthPct = 100 / ev.totalCols;
+      const leftPct = ev.col * widthPct;
+      const bare = ev.totalCols >= 3 || height < 26;
+      const overCap = ev.totalCols > maxConcurrent;
+      return `<div class="slice-block${bare ? ' bare' : ''}${overCap ? ' over-cap' : ''}"
+        style="top:${top}px;height:${Math.max(height - 2, 4)}px;left:calc(${leftPct}% + 1px);width:calc(${widthPct}% - 2px);background:${seriesVar(ev.student)}"
+        title="${esc(ev.student)}, ${fmtRange(ev.start, ev.end)}${overCap ? ' — exceeds concurrency cap' : ''}">
+        <span class="sb-name">${esc(ev.student)}</span><span class="sb-time">${fmtRange(ev.start, ev.end)}</span>
+        <span class="sb-short">${esc(shortLabel(ev.student))}</span>
+      </div>`;
+    }).join('');
+    return `<div class="slice-day">
+      <div class="slice-day-head">${esc(day)}</div>
+      <div class="slice-day-body" style="height:${dayHeight}px;--hour-px:${hourPx}px">${blocks}</div>
+    </div>`;
+  }).join('');
+
+  const activeNames = [...new Set(rows.map(r => r.student))].sort((a, b) => colorIndexFor(a) - colorIndexFor(b));
+  const legend = activeNames.map(n => `<span><i style="background:${seriesVar(n)}"></i>${esc(n)}</span>`).join('') ||
+    '<span class="hint">No shifts scheduled in this scenario.</span>';
+
+  document.getElementById(containerId).innerHTML = `
+    <div class="slice-grid">
+      <div class="slice-axis" style="height:${dayHeight}px">${ticks}</div>
+      <div class="slice-days">${dayCols}</div>
+    </div>
+    <div class="slice-legend">${legend}</div>
+    <p class="hint" style="margin-top:6px;">Each day splits into side-by-side slices when students overlap — width narrows automatically, and a red outline flags a slice beyond the ${maxConcurrent}-person concurrency cap. Hover a slice for its exact name and time.</p>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering: individual student grid (offered vs scheduled vs class)
+// ---------------------------------------------------------------------------
+function buildIndividualSegments(day, studentName, scenarioRows, student, windowStart, windowEnd) {
+  const schedRows = scenarioRows.filter(r => r.student === studentName && r.day === day);
+  const availBlocks = student.availability.filter(a => a.day === day);
+  const classBlocks = student.classes
+    .filter(c => c.day === day)
+    .map(c => ({ start: Math.max(c.start, windowStart), end: Math.min(c.end, windowEnd), course: c.course, type: c.type }))
+    .filter(c => c.end > c.start);
+
+  let boundaries = new Set([windowStart, windowEnd]);
+  availBlocks.forEach(b => { boundaries.add(b.start); boundaries.add(b.end); });
+  schedRows.forEach(r => { boundaries.add(r.schedStart); boundaries.add(r.schedStart + r.dur); });
+  classBlocks.forEach(c => { boundaries.add(c.start); boundaries.add(c.end); });
+  boundaries = [...boundaries].filter(b => b >= windowStart - 1e-9 && b <= windowEnd + 1e-9).sort((a, b) => a - b);
+
+  const segs = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const a = boundaries[i], b = boundaries[i + 1];
+    if (b - a <= 1e-9) continue;
+    const mid = (a + b) / 2;
+    const sched = schedRows.find(r => r.schedStart <= mid && (r.schedStart + r.dur) >= mid);
+    if (sched) { segs.push({ a, b, kind: 'scheduled' }); continue; }
+    const cls = classBlocks.find(c => c.start <= mid && c.end >= mid);
+    if (cls) { segs.push({ a, b, kind: 'class', course: cls.course, ctype: cls.type }); continue; }
+    const off = availBlocks.find(x => x.start <= mid && x.end >= mid);
+    if (off) { segs.push({ a, b, kind: 'offered' }); continue; }
+    segs.push({ a, b, kind: 'blank' });
+  }
+
+  // The boundary set above pools points from availability, classes, AND scheduled
+  // rows indiscriminately — so a raw availability start/end that happens to fall
+  // in the middle of an unbroken scheduled (or class) span still cuts a segment
+  // there, fragmenting one continuous block into adjacent pieces with different
+  // sub-range labels. Merge same-kind neighbors back into one before returning.
+  const merged = [];
+  for (const seg of segs) {
+    const prev = merged[merged.length - 1];
+    const sameKind = prev && prev.kind === seg.kind &&
+      (seg.kind !== 'class' || (prev.course === seg.course && prev.ctype === seg.ctype));
+    if (sameKind && Math.abs(prev.b - seg.a) < 1e-6) prev.b = seg.b;
+    else merged.push({ ...seg });
+  }
+  return merged;
+}
+
+function renderIndividualGrid(containerId, studentName, scenarioRows, days, isNoFri) {
+  const student = STUDENTS.find(s => s.name === studentName);
+  const nSlots = Math.round((WINDOW_END - WINDOW_START) / SLOT);
+  const cols = ALL_DAYS; // always show Mon-Fri columns for layout consistency
+  const segByDay = {};
+  cols.forEach(day => {
+    if (isNoFri && day === 'Friday') { segByDay[day] = [{ r1: 0, r2: nSlots - 1, kind: 'dropped' }]; return; }
+    const segs = buildIndividualSegments(day, studentName, scenarioRows, student, WINDOW_START, WINDOW_END)
+      .map(s => ({ ...s, r1: Math.round((s.a - WINDOW_START) / SLOT), r2: Math.max(Math.round((s.a - WINDOW_START) / SLOT), Math.round((s.b - WINDOW_START) / SLOT) - 1) }));
+    segByDay[day] = segs;
+  });
+
+  let html = `<table class="grid-table"><thead><tr><th>Time</th>${cols.map(d => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>`;
+  const segIdx = {}, spanEnd = {};
+  cols.forEach(d => { segIdx[d] = 0; spanEnd[d] = -1; });
+  for (let i = 0; i < nSlots; i++) {
+    const t = WINDOW_START + i * SLOT;
+    const label = Math.abs((t % 1)) < 1e-6 ? fmtHourAxis(t) : '';
+    html += `<tr><td class="timecol">${label}</td>`;
+    for (const day of cols) {
+      if (i <= spanEnd[day]) continue;
+      const seg = segByDay[day][segIdx[day]++];
+      spanEnd[day] = seg.r2;
+      const span = seg.r2 - seg.r1 + 1;
+      let cls = 'blank', label2 = '';
+      if (seg.kind === 'dropped') { cls = 'dropped'; label2 = 'Not scheduled<br>(Friday dropped)'; }
+      else if (seg.kind === 'scheduled') { cls = 'sched'; label2 = `SCHEDULED<br>${fmtRange(seg.a, seg.b)}`; }
+      else if (seg.kind === 'offered') { cls = 'offered'; label2 = 'Offered'; }
+      else if (seg.kind === 'class') { cls = seg.ctype === 'Internship' || seg.ctype === 'Outside Job' ? 'internship-block' : 'class-block'; label2 = `${esc(seg.course)}<br>(${seg.ctype === 'Internship' ? 'internship' : seg.ctype === 'Outside Job' ? 'job' : 'class'})`; }
+      html += `<td class="cell ${cls}" rowspan="${span}">${label2}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById(containerId).innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Orchestration
+// ---------------------------------------------------------------------------
+let lastState = null;
+
+function renderAll() {
+  const state = recompute();
+  lastState = state;
+
+  document.getElementById('fallBudgetOut').textContent = '$' + state.fallBudget;
+  document.getElementById('usableWeeksOut').textContent = state.usableWeeks;
+  document.getElementById('weeklyRateOut').textContent = state.weeklyRate.toFixed(2) + 'h/wk';
+  document.getElementById('hoursWindowOut').textContent =
+    `${fmtClock(state.windowStart)}–${fmtClock(state.windowEnd)} (${(state.windowEnd - state.windowStart).toFixed(1)}h/day)`;
+  const semTotal = NAMES.reduce((a, n) => a + state.schedWithFri[n], 0) * state.usableWeeks;
+  const semOut = document.getElementById('semesterTotalOut');
+  semOut.textContent = semTotal.toFixed(1) + 'h / ' + state.fallBudget + 'h';
+  semOut.style.color = semTotal > state.fallBudget + 0.5 ? 'var(--alarm)' : '';
+  const weeklyPayroll = NAMES.reduce((a, n) => a + state.weeklyCostWithFri[n], 0);
+  const semesterPayroll = NAMES.reduce((a, n) => a + state.semesterCostWithFri[n], 0);
+  document.getElementById('weeklyPayrollOut').textContent = '$' + weeklyPayroll.toFixed(2);
+  document.getElementById('semesterPayrollOut').textContent = '$' + semesterPayroll.toFixed(2);
+
+  NAMES.forEach(n => {
+    const id = 'grade_' + slug(n);
+    const w = document.getElementById(id + '_weight');
+    if (w) w.textContent = (state.weight[n] * 100).toFixed(1) + '% share';
+  });
+
+  renderPlan(state);
+  renderPayroll(state);
+
+  refreshGridLocationSelects();
+  const friLoc = document.getElementById('gridFriLocation').value;
+  const noFriLoc = document.getElementById('gridNoFriLocation').value;
+  const rowsAtLoc = (rows, loc) => rows.filter(r => (state.locations[r.student] || DEFAULT_LOCATION) === loc);
+  const friRows = rowsAtLoc(state.withFri.rows, friLoc);
+  const noFriRows = rowsAtLoc(state.noFri.rows, noFriLoc);
+  renderCombinedGrid('gridFriWrap', friRows, ALL_DAYS, state.maxConcurrent);
+  renderCombinedGrid('gridNoFriWrap', noFriRows, NO_FRI_DAYS, state.maxConcurrent);
+  renderSliceGrid('gridFriSliceWrap', friRows, ALL_DAYS, state.maxConcurrent);
+  renderSliceGrid('gridNoFriSliceWrap', noFriRows, NO_FRI_DAYS, state.maxConcurrent);
+
+  const sel = document.getElementById('studentSelect');
+  const chosen = sel.value || NAMES[0];
+  const indLocLabel = document.getElementById('indLocationLabel');
+  if (indLocLabel) {
+    const isFixedChosen = state.fixedNames && state.fixedNames.has(chosen);
+    indLocLabel.textContent = (state.locations[chosen] || DEFAULT_LOCATION) + (isFixedChosen ? ' · Fixed schedule' : '');
+  }
+  renderIndividualGrid('indGridFri', chosen, state.withFri.rows, ALL_DAYS, false);
+  renderIndividualGrid('indGridNoFri', chosen, state.noFri.rows, NO_FRI_DAYS, true);
+  document.getElementById('indStatFri').innerHTML =
+    `Scheduled <strong>${state.schedWithFri[chosen].toFixed(2)}h</strong> of <strong>${state.capWithFri[chosen].toFixed(2)}h</strong> offered (${state.capWithFri[chosen] ? (state.schedWithFri[chosen] / state.capWithFri[chosen] * 100).toFixed(0) : 0}% utilization).`;
+  document.getElementById('indStatNoFri').innerHTML =
+    `Scheduled <strong>${state.schedNoFri[chosen].toFixed(2)}h</strong> of <strong>${state.capNoFri[chosen].toFixed(2)}h</strong> offered (${state.capNoFri[chosen] ? (state.schedNoFri[chosen] / state.capNoFri[chosen] * 100).toFixed(0) : 0}% utilization).`;
+
+  const banner = document.getElementById('conflictBanner');
+  const lines = [];
+  const conflicts = [];
+  const fmtConflicts = list => list.map(c => `${c.day} (${c.location})`).join(', ');
+  if (state.withFri.conflictDays.length) conflicts.push('With-Friday: ' + fmtConflicts(state.withFri.conflictDays));
+  if (state.noFri.conflictDays.length) conflicts.push('No-Friday: ' + fmtConflicts(state.noFri.conflictDays));
+  if (conflicts.length) lines.push(`⚠ Concurrency cap (${state.maxConcurrent}) couldn't be fully honored — ${conflicts.join(' · ')}`);
+
+  const dropped = [...new Set([...state.withFri.droppedStudents, ...state.noFri.droppedStudents])];
+  if (state.withFri.trimmed || state.noFri.trimmed) {
+    let msg = `↓ Hours trimmed to stay within the ${state.fallBudget}h budget`;
+    if (dropped.length) msg += ` — ${esc(dropped.join(', '))} lost all hours in at least one scenario`;
+    lines.push(msg);
+  }
+
+  if (lines.length) {
+    banner.hidden = false;
+    banner.innerHTML = lines.join('<br>');
+  } else {
+    banner.hidden = true;
+  }
+
+  document.getElementById('summaryOut').textContent =
+    NAMES.map(n => `${n}: grade ${state.grades[n]}, $${state.wages[n].toFixed(2)}/hr`).join('\n') +
+    `\n\nBudget: $${state.fallBudget} fall / ${state.usableWeeks} usable weeks (${state.weeklyRate.toFixed(2)}h/wk)` +
+    `\nHours: ${fmtClock(state.windowStart)}-${fmtClock(state.windowEnd)}` +
+    `\nPolicy: ${state.weeklyCap}h/wk cap, ${state.minShift}h min shift, ${state.maxConcurrent} max concurrent` +
+    `\nPayroll: $${weeklyPayroll.toFixed(2)}/wk, $${semesterPayroll.toFixed(2)}/semester (With-Fri)`;
+}
+
+function wireControls() {
+  ['fallBudget', 'usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent'].forEach(id => {
+    document.getElementById(id).addEventListener('input', renderAll);
+  });
+  document.getElementById('saveBtn').addEventListener('click', saveState);
+  document.querySelectorAll('.presets button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = btn.dataset.preset;
+      NAMES.forEach(n => {
+        const id = 'grade_' + slug(n);
+        const val = preset === 'equal' ? 5 : DEFAULT_GRADES[n];
+        const el = document.getElementById(id);
+        el.value = val;
+        el.style.setProperty('--fill', val / 10 * 100 + '%');
+        document.getElementById(id + '_val').textContent = val;
+      });
+      renderAll();
+    });
+  });
+
+  refreshStudentSelect();
+  document.getElementById('studentSelect').addEventListener('change', renderAll);
+
+  document.querySelectorAll('.tabs button[role="tab"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tabs button[role="tab"]').forEach(b => b.setAttribute('aria-selected', 'false'));
+      document.querySelectorAll('.tabpanel').forEach(p => p.hidden = true);
+      btn.setAttribute('aria-selected', 'true');
+      document.getElementById('tab-' + btn.dataset.tab).hidden = false;
+    });
+  });
+
+  document.querySelectorAll('.view-toggle').forEach(bar => {
+    const scope = bar.dataset.scope; // 'Fri' or 'NoFri'
+    bar.querySelectorAll('.view-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        bar.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const mode = btn.dataset.mode;
+        document.getElementById('grid' + scope + 'Wrap').hidden = mode !== 'blocks';
+        document.getElementById('grid' + scope + 'SliceWrap').hidden = mode !== 'slices';
+      });
+    });
+  });
+
+  refreshGridLocationSelects();
+  document.getElementById('gridFriLocation').addEventListener('change', renderAll);
+  document.getElementById('gridNoFriLocation').addEventListener('change', renderAll);
+
+  wireAddStudentPanel();
+}
+// Rebuilds the Individual-tab student dropdown from NAMES, keeping whatever was
+// already selected (so adding a student doesn't yank focus away).
+function refreshStudentSelect() {
+  const sel = document.getElementById('studentSelect');
+  const prior = sel.value;
+  sel.innerHTML = NAMES.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if (prior && NAMES.includes(prior)) sel.value = prior;
+}
+// Rebuilds each Grid tab's location filter from KNOWN_LOCATIONS, keeping the
+// current selection when it still exists.
+function refreshGridLocationSelects() {
+  ['gridFriLocation', 'gridNoFriLocation'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prior = sel.value;
+    sel.innerHTML = KNOWN_LOCATIONS.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+    sel.value = (prior && KNOWN_LOCATIONS.includes(prior)) ? prior : KNOWN_LOCATIONS[0];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Add Student panel
+// ---------------------------------------------------------------------------
+let pendingAvail = [];
+let pendingClasses = [];
+
+function parseTimeStr(str) {
+  const [h, m] = str.split(':').map(Number);
+  return h + (m || 0) / 60;
+}
+function renderPendingAvail() {
+  document.getElementById('newAvailList').innerHTML = pendingAvail.map((b, i) =>
+    `<li><span>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span><button type="button" class="rm-btn" data-i="${i}">×</button></li>`
+  ).join('');
+}
+function renderPendingClasses() {
+  document.getElementById('newClassList').innerHTML = pendingClasses.map((c, i) =>
+    `<li><span>${esc(c.day)} ${esc(c.course || c.type)} ${fmtClock(c.start)}–${fmtClock(c.end)}</span><button type="button" class="rm-btn" data-i="${i}">×</button></li>`
+  ).join('');
+}
+
+function wireAddStudentPanel() {
+  const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
+  document.getElementById('newAvailDay').innerHTML = dayOpts;
+  document.getElementById('newClassDay').innerHTML = dayOpts;
+
+  const msg = document.getElementById('addStudentMsg');
+  const setMsg = (text, ok) => { msg.textContent = text; msg.style.color = ok ? 'var(--accent)' : 'var(--alarm)'; };
+
+  const newLocSel = document.getElementById('newLocation');
+  const newLocOther = document.getElementById('newLocation_other');
+  newLocSel.innerHTML = locationOptionsHTML(DEFAULT_LOCATION);
+  newLocSel.addEventListener('change', () => {
+    if (newLocSel.value === '__other__') { newLocOther.hidden = false; newLocOther.value = ''; newLocOther.focus(); }
+  });
+  newLocOther.addEventListener('change', () => {
+    const val = newLocOther.value.trim();
+    if (val) { registerLocation(val); newLocOther.hidden = true; newLocSel.innerHTML = locationOptionsHTML(val); refreshAllLocationSelects(); }
+  });
+
+  document.getElementById('addAvailBlockBtn').addEventListener('click', () => {
+    const day = document.getElementById('newAvailDay').value;
+    const startStr = document.getElementById('newAvailStart').value;
+    const endStr = document.getElementById('newAvailEnd').value;
+    if (!startStr || !endStr) { setMsg('Set both a start and end time for the block.', false); return; }
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) { setMsg('End time must be after start time.', false); return; }
+    pendingAvail.push({ day, start, end });
+    renderPendingAvail();
+    setMsg('', true);
+  });
+  document.getElementById('newAvailList').addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    pendingAvail.splice(+e.target.dataset.i, 1);
+    renderPendingAvail();
+  });
+
+  document.getElementById('addClassBlockBtn').addEventListener('click', () => {
+    const day = document.getElementById('newClassDay').value;
+    const course = document.getElementById('newClassCourse').value.trim();
+    const startStr = document.getElementById('newClassStart').value;
+    const endStr = document.getElementById('newClassEnd').value;
+    const type = document.getElementById('newClassType').value;
+    if (!startStr || !endStr) { setMsg('Set both a start and end time for the block.', false); return; }
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) { setMsg('End time must be after start time.', false); return; }
+    pendingClasses.push({ day, course: course || type, start, end, type });
+    renderPendingClasses();
+    document.getElementById('newClassCourse').value = '';
+    setMsg('', true);
+  });
+  document.getElementById('newClassList').addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    pendingClasses.splice(+e.target.dataset.i, 1);
+    renderPendingClasses();
+  });
+
+  document.getElementById('submitNewStudentBtn').addEventListener('click', () => {
+    const name = document.getElementById('newName').value.trim();
+    if (!name) { setMsg('Name is required.', false); return; }
+    if (NAMES.includes(name)) { setMsg('A student with that name already exists.', false); return; }
+    if (!pendingAvail.length) { setMsg('Add at least one availability block first.', false); return; }
+
+    const location = newLocSel.value === '__other__' ? (newLocOther.value.trim() || DEFAULT_LOCATION) : newLocSel.value;
+    registerLocation(location);
+    const student = {
+      name,
+      major: document.getElementById('newMajor').value.trim(),
+      supervisor: document.getElementById('newSupervisor').value.trim(),
+      location,
+      availability: pendingAvail.map(b => ({ ...b })),
+      classes: pendingClasses.map(c => ({ ...c })),
+    };
+    STUDENTS.push(student);
+    NAMES.push(name);
+    DEFAULT_GRADES[name] = 5;
+    colorIndexFor(name); // reserve a stable slice-view color slot now
+    appendFader(name, 5, DEFAULT_WAGE);
+    refreshStudentSelect();
+    refreshGridLocationSelects();
+    saveCustomStudents();
+
+    pendingAvail = []; pendingClasses = [];
+    renderPendingAvail(); renderPendingClasses();
+    document.getElementById('newName').value = '';
+    document.getElementById('newMajor').value = '';
+    document.getElementById('newSupervisor').value = '';
+    setMsg(`${name} added at ${location} — scroll up to set their grade and wage.`, true);
+    renderAll();
+  });
+}
+
+// Belt-and-suspenders: if the magic-link redirect lands as a same-document
+// navigation (hash-only change on an already-open tab) rather than a fresh
+// page load, pick it up here too — boot() only runs once, on load.
+window.addEventListener('hashchange', async () => {
+  if (consumeAuthRedirect()) {
+    await ensureFreshSession();
+    updateAuthUI();
+    updateSaveUI();
+  }
+});
+
+boot();
+</script>
