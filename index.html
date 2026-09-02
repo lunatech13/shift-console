@@ -213,6 +213,16 @@
 
   .fader.is-fixed .fader-track,
   .fader.is-fixed .fader-weight { opacity: 0.35; pointer-events: none; }
+  .fader-availability { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
+  .avail-label {
+    font-size: 10.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; margin-bottom: 4px;
+  }
+  .avail-label .count-badge { color: var(--muted); }
+  .avail-label .count-badge.zero { color: var(--alarm-ink, #b3261e); font-weight: 600; }
+  .availability-editor .block-row { gap: 4px; }
+  .availability-editor .block-row select,
+  .availability-editor .block-row input[type="time"] { font-size: 10.5px; padding: 4px 5px; }
+  .availability-editor ul.block-list li { font-size: 10.5px; }
   .fader-fixed { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
   .fixed-toggle {
     display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; color: var(--muted);
@@ -1447,11 +1457,13 @@ function faderMarkup(n, g, wage) {
   const id = 'grade_' + slug(n);
   const wageId = 'wage_' + slug(n);
   const locId = 'loc_' + slug(n);
+  const availId = 'avail_' + slug(n);
   const fixId = 'fixed_' + slug(n);
   const clsId = 'classes_' + slug(n);
   const fixed = isFixedStudent(n);
   const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
   const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
+  const availCount = ((STUDENTS.find(x => x.name === n) || {}).availability || []).length;
   return `<div class="fader${fixed ? ' is-fixed' : ''}" data-student="${esc(n)}">
       <div class="fader-top">
         <span class="fader-name">${esc(n)}</span>
@@ -1471,6 +1483,18 @@ function faderMarkup(n, g, wage) {
       <div class="fader-location">
         <select id="${locId}" class="loc-select">${locationOptionsHTML(locationOf(n))}</select>
         <input type="text" id="${locId}_other" class="loc-other-input" placeholder="New location name — Enter to confirm" hidden>
+      </div>
+      <div class="fader-availability" id="${availId}_wrap"${fixed ? ' hidden' : ''}>
+        <div class="avail-label">Availability <span class="count-badge${availCount ? '' : ' zero'}" id="${availId}_count">(${availCount})</span></div>
+        <div class="availability-editor">
+          <div class="block-row">
+            <select id="${availId}_day">${dayOpts}</select>
+            <input type="time" id="${availId}_start">
+            <input type="time" id="${availId}_end">
+            <button type="button" class="add-block-btn" id="${availId}_addBtn">+</button>
+          </div>
+          <ul class="block-list" id="${availId}_list">${fixedBlockListMarkup(n)}</ul>
+        </div>
       </div>
       <div class="fader-fixed">
         <label class="fixed-toggle">
@@ -1554,20 +1578,69 @@ function wireFader(n) {
     }
   });
 
+  const persistIfCustom = () => { if (!BASE_NAMES.has(n)) saveCustomStudents(); };
+
+  // Availability editor — the only place (besides the Fixed-schedule editor,
+  // for fixed students) a student's schedulable hours can be set after
+  // they've been created. Both editors operate on the same s.availability
+  // array; only one is ever visible at a time, toggled by the Fixed checkbox
+  // below, since "fixed" reinterprets that same data as hard hours instead
+  // of a flexible window.
+  const availId = 'avail_' + slug(n);
+  const availWrap = document.getElementById(availId + '_wrap');
+  const availList = document.getElementById(availId + '_list');
+  const availCount = document.getElementById(availId + '_count');
+  const refreshAvailList = () => {
+    availList.innerHTML = fixedBlockListMarkup(n);
+    const s = STUDENTS.find(x => x.name === n);
+    const count = ((s && s.availability) || []).length;
+    availCount.textContent = `(${count})`;
+    availCount.classList.toggle('zero', !count);
+  };
+  document.getElementById(availId + '_addBtn').addEventListener('click', () => {
+    const day = document.getElementById(availId + '_day').value;
+    const startStr = document.getElementById(availId + '_start').value;
+    const endStr = document.getElementById(availId + '_end').value;
+    if (!startStr || !endStr) return;
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.availability = s.availability || [];
+    s.availability.push({ day, start, end });
+    persistIfCustom();
+    refreshAvailList();
+    renderAll();
+  });
+  availList.addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.availability.splice(+e.target.dataset.i, 1);
+    persistIfCustom();
+    refreshAvailList();
+    renderAll();
+  });
+
   const fixId = 'fixed_' + slug(n);
   const fixChk = document.getElementById(fixId);
   const fixEditor = document.getElementById(fixId + '_editor');
   const fixList = document.getElementById(fixId + '_list');
   const faderEl = fixChk.closest('.fader');
 
-  const persistIfCustom = () => { if (!BASE_NAMES.has(n)) saveCustomStudents(); };
   const refreshFixedList = () => { fixList.innerHTML = fixedBlockListMarkup(n); };
 
   fixChk.addEventListener('change', () => {
     const s = STUDENTS.find(x => x.name === n);
     if (s) s.fixed = fixChk.checked;
     fixEditor.hidden = !fixChk.checked;
+    availWrap.hidden = fixChk.checked;
     faderEl.classList.toggle('is-fixed', fixChk.checked);
+    // Both editors render the same underlying s.availability array but only
+    // one is ever visible — whichever becomes visible needs a fresh render,
+    // since the other one may have changed it since either was last shown.
+    refreshFixedList();
+    refreshAvailList();
     persistIfCustom();
     renderAll();
   });
@@ -1585,6 +1658,7 @@ function wireFader(n) {
     s.availability.push({ day, start, end });
     persistIfCustom();
     refreshFixedList();
+    refreshAvailList();
     renderAll();
   });
 
@@ -1595,6 +1669,7 @@ function wireFader(n) {
     s.availability.splice(+e.target.dataset.i, 1);
     persistIfCustom();
     refreshFixedList();
+    refreshAvailList();
     renderAll();
   });
 
@@ -2262,8 +2337,6 @@ function wireAddStudentPanel() {
     const name = document.getElementById('newName').value.trim();
     if (!name) { setMsg('Name is required.', false); return; }
     if (NAMES.includes(name)) { setMsg('A student with that name already exists.', false); return; }
-    if (!pendingAvail.length) { setMsg('Add at least one availability block first.', false); return; }
-
     const location = newLocSel.value === '__other__' ? (newLocOther.value.trim() || DEFAULT_LOCATION) : newLocSel.value;
     registerLocation(location);
     const student = {
@@ -2288,7 +2361,11 @@ function wireAddStudentPanel() {
     document.getElementById('newName').value = '';
     document.getElementById('newMajor').value = '';
     document.getElementById('newSupervisor').value = '';
-    setMsg(`${name} added at ${location} — scroll up to set their grade and wage.`, true);
+    setMsg(
+      `${name} added at ${location} — scroll up to set their grade and wage.` +
+      (student.availability.length ? '' : ' They have no availability yet, so they\'ll show 0 scheduled hours — add it under "Availability" on their card above, or check "Fixed schedule" if their hours are externally assigned.'),
+      true
+    );
     renderAll();
   });
 }
