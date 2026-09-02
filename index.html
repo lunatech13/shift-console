@@ -725,18 +725,21 @@ const supabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY
   && !SUPABASE_URL.startsWith('YOUR_') && !SUPABASE_ANON_KEY.startsWith('YOUR_'));
 let lastSavedAt = null;
 
-// Temporary-access switch: lets specific other people save without touching
-// this file. Controlled entirely from Supabase — a row in `app_access` with
-// an `open_write` flag and an `extra_writers` email list, readable by anyone
-// (needed so this page can check it) but only the admin can change it. Flip
-// `open_write` off in Supabase's SQL editor to instantly revert to
-// admin-only, without redeploying — the extra_writers list stays saved for
-// next time. Fails closed: if this can't be loaded, nobody extra gets in.
-let ACCESS_CONFIG = { open_write: false, extra_writers: [] };
+// Temporary-access switch(es): let other people save without touching this
+// file. Controlled entirely from Supabase — a row in `app_access` — but only
+// the admin can change it. Fails closed: if this can't be loaded, nobody
+// extra gets in.
+//   - open_write + extra_writers: specific pre-approved emails may sign in
+//     (magic link) and save. Flip open_write off to revert instantly.
+//   - public_write: bypasses sign-in entirely — anyone with the link can
+//     save, no auth at all. Flip off the same way. Grade/wage/payroll
+//     masking also lifts while this is on, since an editor needs to see
+//     what they're editing.
+let ACCESS_CONFIG = { open_write: false, extra_writers: [], public_write: false };
 async function loadAccessConfig() {
   if (!supabaseConfigured) return;
   try {
-    const resp = await fetch(APP_ACCESS_TABLE_URL + '?id=eq.1&select=open_write,extra_writers', {
+    const resp = await fetch(APP_ACCESS_TABLE_URL + '?id=eq.1&select=open_write,extra_writers,public_write', {
       headers: supabaseHeaders({ Accept: 'application/vnd.pgrst.object+json' }),
       cache: 'no-store',
     });
@@ -745,6 +748,7 @@ async function loadAccessConfig() {
     ACCESS_CONFIG = {
       open_write: !!(row && row.open_write),
       extra_writers: (row && Array.isArray(row.extra_writers)) ? row.extra_writers : [],
+      public_write: !!(row && row.public_write),
     };
   } catch (e) { /* stay closed */ }
 }
@@ -754,11 +758,13 @@ function emailAllowedToWrite(email) {
   if (e === ADMIN_EMAIL.toLowerCase()) return true;
   return !!(ACCESS_CONFIG.open_write && ACCESS_CONFIG.extra_writers.some(x => (x || '').toLowerCase() === e));
 }
-// True for the admin OR anyone currently on the (switch-gated) extra_writers
-// list — this is the practical "can this session save, and should it see
-// unmasked grade/wage/payroll data" check. isAdminSignedIn() below stays
-// strict (admin only) for status-message wording.
+// True for the admin, anyone currently on the (switch-gated) extra_writers
+// list, OR — while ACCESS_CONFIG.public_write is on — literally anyone, no
+// sign-in at all. This is the practical "can this session save, and should
+// it see unmasked grade/wage/payroll data" check. isAdminSignedIn() below
+// stays strict (admin only) for status-message wording.
 function hasWriteAccess() {
+  if (ACCESS_CONFIG.public_write) return true;
   return !!(authSession && authSession.email && emailAllowedToWrite(authSession.email));
 }
 
@@ -903,7 +909,9 @@ function updateAuthUI() {
     loginBtn.hidden = true;
     logoutBtn.hidden = false;
   } else {
-    authStatus.textContent = 'Viewing (read-only)';
+    authStatus.textContent = ACCESS_CONFIG.public_write
+      ? 'Save is temporarily open to everyone — no sign-in needed'
+      : 'Viewing (read-only)';
     loginBtn.hidden = false;
     logoutBtn.hidden = true;
   }
@@ -1004,12 +1012,15 @@ async function saveState() {
   const btn = document.getElementById('saveBtn');
   const status = document.getElementById('saveStatus');
   if (!supabaseConfigured) return;
-  const fresh = await ensureFreshSession();
-  // Re-check the temporary-access switch fresh on every save attempt, so a
+  // Re-check the temporary-access switches fresh on every save attempt, so a
   // revoke takes effect immediately rather than waiting for a page reload —
   // the RLS policy enforces this regardless, this is just for a clear
   // message instead of a raw HTTP error.
   await loadAccessConfig();
+  // A session refresh is only meaningful when a signed-in session is what's
+  // granting access (admin, or an extra writer) — public_write mode needs no
+  // session at all, so don't let a missing/expired one block it.
+  const fresh = ACCESS_CONFIG.public_write ? true : await ensureFreshSession();
   updateAuthUI();
   if (!fresh || !hasWriteAccess()) {
     updateSaveUI();
@@ -1023,7 +1034,7 @@ async function saveState() {
     const resp = await fetch(SUPABASE_TABLE_URL + '?on_conflict=id', {
       method: 'POST',
       headers: supabaseHeaders({
-        Authorization: 'Bearer ' + authSession.access_token,
+        Authorization: 'Bearer ' + ((authSession && authSession.access_token) || SUPABASE_ANON_KEY),
         Prefer: 'resolution=merge-duplicates,return=minimal',
       }),
       body: JSON.stringify({ id: 1, data: snapshot, updated_at: snapshot.savedAt }),
