@@ -714,14 +714,53 @@ const SUPABASE_URL = 'https://vnbmpbsuxvhlbudcfwre.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-WVQcD1LsxqTae6l7gAtkQ_eJ-oc4Qr'; // the "anon public" key
 const SUPABASE_TABLE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/app_state';
 const SUPABASE_AUTH_URL = SUPABASE_URL.replace(/\/$/, '') + '/auth/v1';
-// The one account allowed to save. Must match the email in the Supabase RLS
-// policies on app_state (see the SQL comment near saveState below) — changing
-// one without the other either locks you out or silently stops enforcing
-// anything client-side (the database policy is still the real backstop).
+const APP_ACCESS_TABLE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/app_access';
+// The one account always allowed to save. Must match the email in the
+// Supabase RLS policies on app_state (see the SQL comment near saveState
+// below) — changing one without the other either locks you out or silently
+// stops enforcing anything client-side (the database policy is still the
+// real backstop).
 const ADMIN_EMAIL = 'paulwise@me.com';
 const supabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY
   && !SUPABASE_URL.startsWith('YOUR_') && !SUPABASE_ANON_KEY.startsWith('YOUR_'));
 let lastSavedAt = null;
+
+// Temporary-access switch: lets specific other people save without touching
+// this file. Controlled entirely from Supabase — a row in `app_access` with
+// an `open_write` flag and an `extra_writers` email list, readable by anyone
+// (needed so this page can check it) but only the admin can change it. Flip
+// `open_write` off in Supabase's SQL editor to instantly revert to
+// admin-only, without redeploying — the extra_writers list stays saved for
+// next time. Fails closed: if this can't be loaded, nobody extra gets in.
+let ACCESS_CONFIG = { open_write: false, extra_writers: [] };
+async function loadAccessConfig() {
+  if (!supabaseConfigured) return;
+  try {
+    const resp = await fetch(APP_ACCESS_TABLE_URL + '?id=eq.1&select=open_write,extra_writers', {
+      headers: supabaseHeaders({ Accept: 'application/vnd.pgrst.object+json' }),
+      cache: 'no-store',
+    });
+    if (!resp.ok) return; // table not set up yet, or no row — stay closed
+    const row = await resp.json();
+    ACCESS_CONFIG = {
+      open_write: !!(row && row.open_write),
+      extra_writers: (row && Array.isArray(row.extra_writers)) ? row.extra_writers : [],
+    };
+  } catch (e) { /* stay closed */ }
+}
+function emailAllowedToWrite(email) {
+  if (!email) return false;
+  const e = email.toLowerCase();
+  if (e === ADMIN_EMAIL.toLowerCase()) return true;
+  return !!(ACCESS_CONFIG.open_write && ACCESS_CONFIG.extra_writers.some(x => (x || '').toLowerCase() === e));
+}
+// True for the admin OR anyone currently on the (switch-gated) extra_writers
+// list — this is the practical "can this session save, and should it see
+// unmasked grade/wage/payroll data" check. isAdminSignedIn() below stays
+// strict (admin only) for status-message wording.
+function hasWriteAccess() {
+  return !!(authSession && authSession.email && emailAllowedToWrite(authSession.email));
+}
 
 function supabaseHeaders(extra) {
   return Object.assign({
@@ -816,11 +855,11 @@ async function ensureFreshSession() {
 async function requestMagicLink(email) {
   const msg = document.getElementById('loginMsg');
   if (!email) { if (msg) msg.textContent = 'Enter an email address.'; return; }
-  if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (!emailAllowedToWrite(email)) {
     // Not a security boundary (the RLS policy is) — just avoids creating a
     // stray Supabase account and a confusing "signed in but Save still
     // fails" experience for anyone who tries this by mistake.
-    if (msg) msg.textContent = 'Only the admin account can sign in here.';
+    if (msg) msg.textContent = 'This account is not authorized to sign in here.';
     return;
   }
   if (msg) msg.textContent = 'Sending…';
@@ -850,14 +889,17 @@ function updateAuthUI() {
   // Fails safe: grade/wage/payroll stay masked (see the .admin-only / .viewer-mask
   // rules) unless this ends up true. Set before the early returns below so a
   // misconfigured or not-yet-loaded page never accidentally shows them.
-  document.body.classList.toggle('is-admin', isAdminSignedIn());
+  document.body.classList.toggle('is-admin', hasWriteAccess());
   if (!authStatus || !loginBtn || !logoutBtn) return;
   if (!supabaseConfigured) { authStatus.textContent = ''; loginBtn.hidden = true; logoutBtn.hidden = true; return; }
   if (authSession && authSession.email) {
-    const isAdmin = authSession.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    const isAdmin = isAdminSignedIn();
+    const isExtraWriter = !isAdmin && hasWriteAccess();
     authStatus.textContent = isAdmin
       ? `Signed in as ${authSession.email}`
-      : `Signed in as ${authSession.email} (read-only — not the admin account)`;
+      : isExtraWriter
+        ? `Signed in as ${authSession.email} (temporary save access)`
+        : `Signed in as ${authSession.email} (read-only — not authorized to save)`;
     loginBtn.hidden = true;
     logoutBtn.hidden = false;
   } else {
@@ -950,7 +992,7 @@ function updateSaveUI() {
     status.textContent = 'Saving is not configured yet — add your Supabase URL and key to this file.';
     return;
   }
-  const signedIn = isAdminSignedIn();
+  const signedIn = hasWriteAccess();
   btn.hidden = !signedIn;
   if (signedIn) {
     status.textContent = lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleString()}` : 'Not saved yet';
@@ -963,8 +1005,13 @@ async function saveState() {
   const status = document.getElementById('saveStatus');
   if (!supabaseConfigured) return;
   const fresh = await ensureFreshSession();
+  // Re-check the temporary-access switch fresh on every save attempt, so a
+  // revoke takes effect immediately rather than waiting for a page reload —
+  // the RLS policy enforces this regardless, this is just for a clear
+  // message instead of a raw HTTP error.
+  await loadAccessConfig();
   updateAuthUI();
-  if (!fresh || !isAdminSignedIn()) {
+  if (!fresh || !hasWriteAccess()) {
     updateSaveUI();
     status.textContent = fresh ? 'This account cannot save changes.' : 'Your sign-in expired — sign in again to save.';
     return;
@@ -995,7 +1042,7 @@ async function saveState() {
 }
 async function boot() {
   if (!consumeAuthRedirect()) loadStoredAuthSession();
-  await ensureFreshSession();
+  await Promise.all([ensureFreshSession(), loadAccessConfig()]);
 
   const loaded = await loadSavedState();
 
@@ -2240,7 +2287,7 @@ function wireAddStudentPanel() {
 // page load, pick it up here too — boot() only runs once, on load.
 window.addEventListener('hashchange', async () => {
   if (consumeAuthRedirect()) {
-    await ensureFreshSession();
+    await Promise.all([ensureFreshSession(), loadAccessConfig()]);
     updateAuthUI();
     updateSaveUI();
   }
