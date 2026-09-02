@@ -223,6 +223,17 @@
   .availability-editor .block-row select,
   .availability-editor .block-row input[type="time"] { font-size: 10.5px; padding: 4px 5px; }
   .availability-editor ul.block-list li { font-size: 10.5px; }
+  .auto-toggle {
+    display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; color: var(--muted);
+    cursor: pointer; line-height: 1.35; margin-bottom: 6px;
+  }
+  .auto-toggle input[type="checkbox"] { margin-top: 1px; flex: 0 0 auto; }
+  ul.block-list.auto-preview { margin: 0; }
+  ul.block-list.auto-preview li {
+    font-size: 10.5px; font-style: italic; color: var(--muted); list-style: none;
+    display: block; padding: 2px 0;
+  }
+  ul.block-list.auto-preview li.empty-hint { color: var(--alarm-ink, #b3261e); font-style: normal; }
   .fader-fixed { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
   .fixed-toggle {
     display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; color: var(--muted);
@@ -371,6 +382,7 @@
   }
   .add-student .mini-head .hint { text-transform: none; font-weight: 400; }
   .block-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+  .block-row[hidden], ul.block-list[hidden] { display: none; }
   .block-row select, .block-row input[type="time"], .block-row input[type="text"] {
     background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
     color: var(--ink); padding: 5px 6px; font-size: 11.5px; flex: 1 1 70px; min-width: 0;
@@ -542,13 +554,17 @@
         </div>
 
         <h3 class="mini-head">Availability blocks</h3>
-        <div class="block-row">
+        <label class="auto-toggle">
+          <input type="checkbox" id="newAvailAuto" checked>
+          Auto — available except classes/internship/job blocks below
+        </label>
+        <div class="block-row" id="newAvailManualRow" hidden>
           <select id="newAvailDay"></select>
           <input type="time" id="newAvailStart">
           <input type="time" id="newAvailEnd">
           <button type="button" class="add-block-btn" id="addAvailBlockBtn">+</button>
         </div>
-        <ul class="block-list" id="newAvailList"></ul>
+        <ul class="block-list" id="newAvailList" hidden></ul>
 
         <h3 class="mini-head">Class / internship / job blocks <span class="hint">optional</span></h3>
         <div class="block-row">
@@ -1111,6 +1127,51 @@ function shortLabel(name) {
 // ---------------------------------------------------------------------------
 function round4(x) { return Math.round(x * 10000) / 10000; }
 
+// Given a [start,end) window and a set of blocking intervals (which may be
+// unsorted or overlapping), returns the open gaps left inside the window —
+// merge-then-carve-out. Used to derive "available except classes" hours.
+function subtractIntervals(start, end, blockers) {
+  const clipped = blockers
+    .map(([s, e]) => [Math.max(s, start), Math.min(e, end)])
+    .filter(([s, e]) => e - s > 1e-9)
+    .sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const b of clipped) {
+    if (merged.length && b[0] - merged[merged.length - 1][1] <= 1e-9) {
+      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], b[1]);
+    } else {
+      merged.push([b[0], b[1]]);
+    }
+  }
+  const gaps = [];
+  let cursor = start;
+  for (const [s, e] of merged) {
+    if (s - cursor > 1e-9) gaps.push([cursor, s]);
+    cursor = Math.max(cursor, e);
+  }
+  if (end - cursor > 1e-9) gaps.push([cursor, end]);
+  return gaps;
+}
+
+// "Auto" availability: assume a student is free the whole department window
+// on every day, minus whatever's on their class/internship/job list. Opt-in
+// per student (s.autoAvailability) rather than a blanket reinterpretation of
+// the data model — some students' real availability is narrower than "hours
+// minus classes" (an outside commitment that isn't logged as a class block,
+// a preference not to work right after class, etc.), so this is offered as
+// a convenience for students whose free time really is just "not in class,"
+// not force-applied to everyone's already-entered, more specific hours.
+function deriveAutoAvailability(s, deptStart, deptEnd) {
+  const out = [];
+  for (const day of ALL_DAYS) {
+    const blockers = ((s && s.classes) || []).filter(c => c.day === day).map(c => [c.start, c.end]);
+    for (const [gs, ge] of subtractIntervals(deptStart, deptEnd, blockers)) {
+      out.push({ day, start: round4(gs), end: round4(ge) });
+    }
+  }
+  return out;
+}
+
 function buildBlocks(students, excludeDays, deptStart, deptEnd) {
   // Clips each stated availability block to the department's open-hours window
   // (deptStart/deptEnd). Narrowing the window correctly reduces a block's usable
@@ -1125,7 +1186,8 @@ function buildBlocks(students, excludeDays, deptStart, deptEnd) {
   if (deptEnd === undefined) deptEnd = WINDOW_END;
   const out = [];
   for (const s of students) {
-    for (const a of s.availability) {
+    const avail = (s.autoAvailability && !s.fixed) ? deriveAutoAvailability(s, deptStart, deptEnd) : s.availability;
+    for (const a of avail) {
       if (excludeDays.includes(a.day)) continue;
       let start, end;
       if (s.fixed) {
@@ -1370,7 +1432,7 @@ function recompute() {
 
   return {
     fallBudget, usableWeeks, weeklyCap, minShift, maxConcurrent, weeklyRate, grades, totalGrade,
-    windowStart: WINDOW_START, windowEnd: WINDOW_END,
+    windowStart: WINDOW_START, windowEnd: WINDOW_END, deptStart, deptEnd,
     capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
     withFri, noFri, schedWithFri, schedNoFri,
     wages, weeklyCostWithFri, weeklyCostNoFri, semesterCostWithFri,
@@ -1441,6 +1503,10 @@ function fixedBlockListMarkup(n) {
     `<li><span>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span><button type="button" class="rm-btn" data-i="${b.i}">×</button></li>`
   ).join('');
 }
+function autoPreviewListMarkup(blocks) {
+  if (!blocks.length) return '<li class="empty-hint">No open hours in this window — classes/blocks fill every day.</li>';
+  return blocks.map(b => `<li>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</li>`).join('');
+}
 function classTypeOptionsHTML(selected) {
   return ['Class', 'Internship', 'Outside Job']
     .map(t => `<option value="${t}"${t === selected ? ' selected' : ''}>${t}</option>`).join('');
@@ -1463,7 +1529,10 @@ function faderMarkup(n, g, wage) {
   const fixed = isFixedStudent(n);
   const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
   const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
-  const availCount = ((STUDENTS.find(x => x.name === n) || {}).availability || []).length;
+  const student = STUDENTS.find(x => x.name === n) || {};
+  const auto = !!student.autoAvailability;
+  const autoBlocks = auto ? deriveAutoAvailability(student, WINDOW_START, WINDOW_END) : [];
+  const availCount = auto ? autoBlocks.length : (student.availability || []).length;
   return `<div class="fader${fixed ? ' is-fixed' : ''}" data-student="${esc(n)}">
       <div class="fader-top">
         <span class="fader-name">${esc(n)}</span>
@@ -1486,7 +1555,11 @@ function faderMarkup(n, g, wage) {
       </div>
       <div class="fader-availability" id="${availId}_wrap"${fixed ? ' hidden' : ''}>
         <div class="avail-label">Availability <span class="count-badge${availCount ? '' : ' zero'}" id="${availId}_count">(${availCount})</span></div>
-        <div class="availability-editor">
+        <label class="auto-toggle">
+          <input type="checkbox" id="${availId}_auto"${auto ? ' checked' : ''}>
+          Auto — available except classes below
+        </label>
+        <div class="availability-editor" id="${availId}_manual"${auto ? ' hidden' : ''}>
           <div class="block-row">
             <select id="${availId}_day">${dayOpts}</select>
             <input type="time" id="${availId}_start">
@@ -1495,6 +1568,7 @@ function faderMarkup(n, g, wage) {
           </div>
           <ul class="block-list" id="${availId}_list">${fixedBlockListMarkup(n)}</ul>
         </div>
+        <ul class="block-list auto-preview" id="${availId}_preview"${auto ? '' : ' hidden'}>${autoPreviewListMarkup(autoBlocks)}</ul>
       </div>
       <div class="fader-fixed">
         <label class="fixed-toggle">
@@ -1588,6 +1662,9 @@ function wireFader(n) {
   // of a flexible window.
   const availId = 'avail_' + slug(n);
   const availWrap = document.getElementById(availId + '_wrap');
+  const availManual = document.getElementById(availId + '_manual');
+  const availPreview = document.getElementById(availId + '_preview');
+  const availAutoChk = document.getElementById(availId + '_auto');
   const availList = document.getElementById(availId + '_list');
   const availCount = document.getElementById(availId + '_count');
   const refreshAvailList = () => {
@@ -1597,6 +1674,15 @@ function wireFader(n) {
     availCount.textContent = `(${count})`;
     availCount.classList.toggle('zero', !count);
   };
+  availAutoChk.addEventListener('change', () => {
+    const s = STUDENTS.find(x => x.name === n);
+    if (s) s.autoAvailability = availAutoChk.checked;
+    availManual.hidden = availAutoChk.checked;
+    availPreview.hidden = !availAutoChk.checked;
+    if (!availAutoChk.checked) refreshAvailList();
+    persistIfCustom();
+    renderAll();
+  });
   document.getElementById(availId + '_addBtn').addEventListener('click', () => {
     const day = document.getElementById(availId + '_day').value;
     const startStr = document.getElementById(availId + '_start').value;
@@ -2125,6 +2211,21 @@ function renderAll() {
     const id = 'grade_' + slug(n);
     const w = document.getElementById(id + '_weight');
     if (w) w.textContent = (state.weight[n] * 100).toFixed(1) + '% share';
+
+    const s = STUDENTS.find(x => x.name === n);
+    if (s && s.autoAvailability && !s.fixed) {
+      const availId = 'avail_' + slug(n);
+      const preview = document.getElementById(availId + '_preview');
+      const count = document.getElementById(availId + '_count');
+      if (preview) {
+        const blocks = deriveAutoAvailability(s, state.deptStart, state.deptEnd);
+        preview.innerHTML = autoPreviewListMarkup(blocks);
+        if (count) {
+          count.textContent = `(${blocks.length})`;
+          count.classList.toggle('zero', !blocks.length);
+        }
+      }
+    }
   });
 
   renderPlan(state);
@@ -2296,6 +2397,16 @@ function wireAddStudentPanel() {
     if (val) { registerLocation(val); newLocOther.hidden = true; newLocSel.innerHTML = locationOptionsHTML(val); refreshAllLocationSelects(); }
   });
 
+  const newAvailAuto = document.getElementById('newAvailAuto');
+  const newAvailManualRow = document.getElementById('newAvailManualRow');
+  const newAvailList = document.getElementById('newAvailList');
+  const syncNewAvailAutoUI = () => {
+    newAvailManualRow.hidden = newAvailAuto.checked;
+    newAvailList.hidden = newAvailAuto.checked;
+  };
+  newAvailAuto.addEventListener('change', syncNewAvailAutoUI);
+  syncNewAvailAutoUI();
+
   document.getElementById('addAvailBlockBtn').addEventListener('click', () => {
     const day = document.getElementById('newAvailDay').value;
     const startStr = document.getElementById('newAvailStart').value;
@@ -2344,6 +2455,7 @@ function wireAddStudentPanel() {
       major: document.getElementById('newMajor').value.trim(),
       supervisor: document.getElementById('newSupervisor').value.trim(),
       location,
+      autoAvailability: newAvailAuto.checked,
       availability: pendingAvail.map(b => ({ ...b })),
       classes: pendingClasses.map(c => ({ ...c })),
     };
@@ -2361,11 +2473,17 @@ function wireAddStudentPanel() {
     document.getElementById('newName').value = '';
     document.getElementById('newMajor').value = '';
     document.getElementById('newSupervisor').value = '';
-    setMsg(
-      `${name} added at ${location} — scroll up to set their grade and wage.` +
-      (student.availability.length ? '' : ' They have no availability yet, so they\'ll show 0 scheduled hours — add it under "Availability" on their card above, or check "Fixed schedule" if their hours are externally assigned.'),
-      true
-    );
+    newAvailAuto.checked = true;
+    syncNewAvailAutoUI();
+    let availWarning = '';
+    if (student.autoAvailability) {
+      if (!deriveAutoAvailability(student, WINDOW_START, WINDOW_END).length) {
+        availWarning = ' Their auto-derived availability came up empty — their class blocks cover the whole department window, so they\'ll show 0 scheduled hours until that\'s resolved.';
+      }
+    } else if (!student.availability.length) {
+      availWarning = ' They have no availability yet, so they\'ll show 0 scheduled hours — add it under "Availability" on their card above, or check "Fixed schedule" if their hours are externally assigned.';
+    }
+    setMsg(`${name} added at ${location} — scroll up to set their grade and wage.${availWarning}`, true);
     renderAll();
   });
 }
