@@ -156,6 +156,7 @@
   .panel h2 .hint { text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--muted); font-weight: 400; }
 
   .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .field[hidden] { display: none; }
   .field:last-child { margin-bottom: 0; }
   .field label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
   .field input[type="number"] {
@@ -191,7 +192,7 @@
   .fader-wage { font-size: 10.5px; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
   .fader-wage input[type="number"] {
     background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
-    color: var(--ink); padding: 2px 5px; font-size: 11px; width: 52px; text-align: right;
+    color: var(--ink); padding: 2px 5px; font-size: 11px; width: 68px; text-align: right;
   }
 
   /* Grade/weight/wage are payroll-adjacent info — visible only when signed in
@@ -213,6 +214,7 @@
 
   .fader.is-fixed .fader-track,
   .fader.is-fixed .fader-weight { opacity: 0.35; pointer-events: none; }
+  .fader.is-fws .fader-weight { font-style: italic; }
   .fader-availability { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
   .avail-label {
     font-size: 10.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; margin-bottom: 4px;
@@ -250,6 +252,30 @@
     letter-spacing: 0.03em; color: var(--accent); background: var(--accent-soft, var(--surface-2));
     border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px;
   }
+  .fws-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--amber); background: var(--amber-soft, var(--surface-2));
+    border: 1px solid var(--amber); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .fader-type { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
+  .type-label {
+    font-size: 10.5px; color: var(--muted); display: flex; align-items: center;
+    justify-content: space-between; gap: 6px;
+  }
+  .type-select {
+    font-size: 10.5px; padding: 3px 5px; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 5px; color: var(--ink);
+  }
+  .fws-award-field { margin-top: 6px; }
+  .fws-award-field label {
+    font-size: 10.5px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  }
+  .fws-award-field input[type="number"] {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
+    color: var(--ink); padding: 2px 5px; font-size: 11px; width: 72px; text-align: right;
+  }
+  .fws-award-hint { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); text-align: right; }
 
   .fader-classes { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
   .fader-classes summary {
@@ -266,6 +292,11 @@
   .classes-editor .block-row input[type="time"],
   .classes-editor .block-row input[type="text"] { font-size: 10.5px; padding: 4px 5px; }
   .classes-editor ul.block-list li { font-size: 10.5px; }
+
+  .roster-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-bottom: 16px;
+  }
+  .roster-card.fader { margin-bottom: 0; }
 
   .presets { display: flex; gap: 6px; margin-top: 10px; }
   .presets button {
@@ -500,8 +531,8 @@
         </div>
         <div class="readout"><span>Weekly rate</span><span id="weeklyRateOut" class="mono">—</span></div>
         <div class="readout"><span>Semester total (With-Fri)</span><span id="semesterTotalOut" class="mono">—</span></div>
-        <div class="readout admin-only"><span>Weekly payroll $ (With-Fri)</span><span id="weeklyPayrollOut" class="mono">—</span></div>
-        <div class="readout admin-only"><span>Semester payroll $ (With-Fri)</span><span id="semesterPayrollOut" class="mono">—</span></div>
+        <div class="readout admin-only"><span>Weekly payroll $ (SEP, With-Fri)</span><span id="weeklyPayrollOut" class="mono">—</span></div>
+        <div class="readout admin-only"><span>Semester payroll $ (SEP, With-Fri)</span><span id="semesterPayrollOut" class="mono">—</span></div>
       </section>
 
       <section class="panel">
@@ -541,55 +572,6 @@
           <button type="button" data-preset="equal">Equal weight</button>
         </div>
       </section>
-
-      <section class="panel add-student">
-        <h2>Add Student <span class="hint">runs in this browser only</span></h2>
-        <div class="field"><label>Name</label><input type="text" id="newName" placeholder="Full name"></div>
-        <div class="field"><label>Major</label><input type="text" id="newMajor" placeholder="optional"></div>
-        <div class="field"><label>Supervisor</label><input type="text" id="newSupervisor" placeholder="optional"></div>
-        <div class="field">
-          <label>Location</label>
-          <select id="newLocation"></select>
-          <input type="text" id="newLocation_other" class="loc-other-input" placeholder="New location name — Enter to confirm" hidden style="margin-top:5px;">
-        </div>
-
-        <h3 class="mini-head">Availability blocks</h3>
-        <label class="auto-toggle">
-          <input type="checkbox" id="newAvailAuto" checked>
-          Auto — available except classes/internship/job blocks below
-        </label>
-        <div class="block-row" id="newAvailManualRow" hidden>
-          <select id="newAvailDay"></select>
-          <input type="time" id="newAvailStart">
-          <input type="time" id="newAvailEnd">
-          <button type="button" class="add-block-btn" id="addAvailBlockBtn">+</button>
-        </div>
-        <ul class="block-list" id="newAvailList" hidden></ul>
-
-        <h3 class="mini-head">Class / internship / job blocks <span class="hint">optional</span></h3>
-        <div class="block-row">
-          <select id="newClassDay"></select>
-          <input type="text" id="newClassCourse" placeholder="Course / name">
-          <input type="time" id="newClassStart">
-          <input type="time" id="newClassEnd">
-          <select id="newClassType">
-            <option value="Class">Class</option>
-            <option value="Internship">Internship</option>
-            <option value="Outside Job">Outside Job</option>
-          </select>
-          <button type="button" class="add-block-btn" id="addClassBlockBtn">+</button>
-        </div>
-        <ul class="block-list" id="newClassList"></ul>
-
-        <button type="button" class="primary-btn" id="submitNewStudentBtn">Add Student</button>
-        <p id="addStudentMsg" class="hint"></p>
-      </section>
-
-      <section class="panel summary admin-only">
-        <h2>Settings summary</h2>
-        <p class="hint">Select and copy this back to Claude to lock a configuration into the official workbook.</p>
-        <pre id="summaryOut" class="mono"></pre>
-      </section>
     </aside>
 
     <main class="stage">
@@ -598,6 +580,7 @@
         <button role="tab" id="tabbtn-gridFri" aria-controls="tab-gridFri" aria-selected="false" data-tab="gridFri">Grid — With Friday</button>
         <button role="tab" id="tabbtn-gridNoFri" aria-controls="tab-gridNoFri" aria-selected="false" data-tab="gridNoFri">Grid — No Friday</button>
         <button role="tab" id="tabbtn-individual" aria-controls="tab-individual" aria-selected="false" data-tab="individual">Individual</button>
+        <button role="tab" id="tabbtn-roster" aria-controls="tab-roster" aria-selected="false" data-tab="roster">Roster</button>
       </nav>
 
       <section id="tab-plan" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-plan">
@@ -652,12 +635,83 @@
           </div>
         </div>
       </section>
+
+      <section id="tab-roster" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-roster" hidden>
+        <div class="roster-grid" id="rosterList"></div>
+
+        <section class="panel add-student">
+          <h2>Add Student <span class="hint">runs in this browser only</span></h2>
+          <div class="field"><label>Name</label><input type="text" id="newName" placeholder="Full name"></div>
+          <div class="field"><label>Major</label><input type="text" id="newMajor" placeholder="optional"></div>
+          <div class="field"><label>Supervisor</label><input type="text" id="newSupervisor" placeholder="optional"></div>
+          <div class="field">
+            <label>Location</label>
+            <select id="newLocation"></select>
+            <input type="text" id="newLocation_other" class="loc-other-input" placeholder="New location name — Enter to confirm" hidden style="margin-top:5px;">
+          </div>
+          <div class="field">
+            <label>Program</label>
+            <select id="newStudentType">
+              <option value="SEP" selected>SEP (shared budget)</option>
+              <option value="FWS">FWS (own award)</option>
+            </select>
+          </div>
+          <div class="field" id="newFwsAwardWrap" hidden>
+            <label>Semester award ($)</label>
+            <input type="number" id="newFwsAward" value="0" min="0" step="10">
+          </div>
+
+          <h3 class="mini-head">Availability blocks</h3>
+          <label class="auto-toggle">
+            <input type="checkbox" id="newAvailAuto" checked>
+            Auto — available except classes/internship/job blocks below
+          </label>
+          <div class="block-row" id="newAvailManualRow" hidden>
+            <select id="newAvailDay"></select>
+            <input type="time" id="newAvailStart">
+            <input type="time" id="newAvailEnd">
+            <button type="button" class="add-block-btn" id="addAvailBlockBtn">+</button>
+          </div>
+          <ul class="block-list" id="newAvailList" hidden></ul>
+
+          <h3 class="mini-head">Class / internship / job blocks <span class="hint">optional</span></h3>
+          <div class="block-row">
+            <select id="newClassDay"></select>
+            <input type="text" id="newClassCourse" placeholder="Course / name">
+            <input type="time" id="newClassStart">
+            <input type="time" id="newClassEnd">
+            <select id="newClassType">
+              <option value="Class">Class</option>
+              <option value="Internship">Internship</option>
+              <option value="Outside Job">Outside Job</option>
+            </select>
+            <button type="button" class="add-block-btn" id="addClassBlockBtn">+</button>
+          </div>
+          <ul class="block-list" id="newClassList"></ul>
+
+          <button type="button" class="primary-btn" id="submitNewStudentBtn">Add Student</button>
+          <p id="addStudentMsg" class="hint"></p>
+        </section>
+
+        <section class="panel summary admin-only">
+          <h2>Settings summary</h2>
+          <p class="hint">Select and copy this back to Claude to lock a configuration into the official workbook.</p>
+          <pre id="summaryOut" class="mono"></pre>
+        </section>
+      </section>
     </main>
   </div>
 </div>
 
 <script>
 const STUDENTS = [{"name": "Eleanor Cole", "major": "Video Production", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 12.0}, {"day": "Monday", "start": 14.8333, "end": 17.0}, {"day": "Tuesday", "start": 9.0, "end": 13.0}, {"day": "Tuesday", "start": 15.0, "end": 16.0}, {"day": "Wednesday", "start": 9.0, "end": 16.5}, {"day": "Thursday", "start": 9.0, "end": 10.5}, {"day": "Thursday", "start": 12.3333, "end": 13.5}, {"day": "Friday", "start": 9.0, "end": 16.5}], "classes": [{"day": "Monday", "course": "Remote Field Production", "start": 12.0, "end": 14.8333, "type": "Class"}, {"day": "Tuesday", "course": "Diversity of Life", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Diversity of Life", "start": 10.5, "end": 12.3333, "type": "Class"}, {"day": "Thursday", "course": "Diversity of Life (2nd listing - verify)", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Thursday", "course": "Guerrilla Filmmaking", "start": 15.0, "end": 17.8333, "type": "Class"}]}, {"name": "Emilie Townsend", "major": "VPT", "supervisor": "Sharleen F.", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 12.0}, {"day": "Tuesday", "start": 9.0, "end": 12.0}, {"day": "Tuesday", "start": 14.8333, "end": 17.0}, {"day": "Wednesday", "start": 9.0, "end": 16.5}, {"day": "Thursday", "start": 9.0, "end": 12.0}, {"day": "Friday", "start": 10.0, "end": 16.5}], "classes": [{"day": "Monday", "course": "Remote Field Prod.", "start": 12.0, "end": 14.8333, "type": "Class"}, {"day": "Monday", "course": "Media Mgmt.", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Tuesday", "course": "Math 1010", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Tuesday", "course": "ENG 1010", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Thursday", "course": "Math 1010", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Thursday", "course": "ENG 1010", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Thursday", "course": "Adv Editing (Avid)", "start": 15.0, "end": 17.8333, "type": "Class"}]}, {"name": "Alexander Wachira", "major": "Video Production", "supervisor": "Sharleen Foster", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.5, "end": 11.5}, {"day": "Tuesday", "start": 9.5, "end": 11.5}, {"day": "Wednesday", "start": 9.5, "end": 16.5}, {"day": "Thursday", "start": 9.5, "end": 11.5}, {"day": "Friday", "start": 9.5, "end": 16.5}], "classes": [{"day": "Monday", "course": "Remote Field Production", "start": 12.0, "end": 14.8333, "type": "Class"}, {"day": "Monday", "course": "Scriptwriting for Mass Media", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Tuesday", "course": "Studio Production II", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Tuesday", "course": "Introduction to Film", "start": 13.5, "end": 14.8333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Studio Production II", "start": 12.0, "end": 13.3333, "type": "Class"}, {"day": "Thursday", "course": "Introduction to Film", "start": 13.5, "end": 14.8333, "type": "Class"}]}, {"name": "Tyler Smith", "major": "VPT", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 13.5}, {"day": "Tuesday", "start": 11.5, "end": 16.5}, {"day": "Wednesday", "start": 9.0, "end": 12.0}, {"day": "Thursday", "start": 9.0, "end": 10.0}, {"day": "Thursday", "start": 11.3333, "end": 17.0}, {"day": "Friday", "start": 9.0, "end": 16.5}], "classes": [{"day": "Monday", "course": "Special Topics In Video", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Tuesday", "course": "Photography 1", "start": 10.0, "end": 11.3333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Photography 1", "start": 10.0, "end": 11.3333, "type": "Class"}, {"day": "Thursday", "course": "Remote Field Production", "start": 18.0, "end": 20.8333, "type": "Class"}]}, {"name": "Donna Dearmon", "major": "VPT", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 9.0, "end": 15.0}, {"day": "Tuesday", "start": 14.5, "end": 15.0}, {"day": "Wednesday", "start": 9.0, "end": 17.0}, {"day": "Thursday", "start": 9.0, "end": 17.0}, {"day": "Friday", "start": 9.0, "end": 17.0}], "classes": [{"day": "Monday", "course": "Special Topics VPT1020 P05", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Monday", "course": "Intro to Media Management VPT1875 P70", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Tuesday", "course": "Internship", "start": 9.0, "end": 14.5, "type": "Internship"}, {"day": "Tuesday", "course": "Adobe After Effects VPT1021 P35", "start": 15.0, "end": 17.8333, "type": "Class"}, {"day": "Wednesday", "course": "Advanced Editing VPT2215 P72", "start": 18.0, "end": 20.8333, "type": "Class"}, {"day": "Thursday", "course": "Remote Field Production VPT2960 P73", "start": 18.0, "end": 20.8333, "type": "Class"}]}, {"name": "Delia Gentry", "major": "PSY", "supervisor": "Paul Wise", "location": "Equipment Room — Bagwell Building", "availability": [{"day": "Monday", "start": 11.3333, "end": 13.5}, {"day": "Tuesday", "start": 9.0, "end": 10.0}, {"day": "Tuesday", "start": 13.0, "end": 17.0}, {"day": "Thursday", "start": 9.0, "end": 10.0}, {"day": "Thursday", "start": 13.3333, "end": 17.0}, {"day": "Friday", "start": 9.0, "end": 16.0}], "classes": [{"day": "Monday", "course": "Class (course name not given - confirm)", "start": 8.5, "end": 11.3333, "type": "Class"}, {"day": "Monday", "course": "Class (course name not given - confirm)", "start": 13.5, "end": 21.0, "type": "Class"}, {"day": "Tuesday", "course": "Class (course name not given - confirm)", "start": 10.0, "end": 13.0, "type": "Class"}, {"day": "Wednesday", "course": "Class (course name not given - confirm)", "start": 8.5, "end": 21.0, "type": "Class"}, {"day": "Thursday", "course": "Class (course name not given - confirm)", "start": 10.0, "end": 13.3333, "type": "Class"}, {"day": "Friday", "course": "Outside job (non-PSTCC)", "start": 16.0, "end": 21.0, "type": "Outside Job"}]}];
+
+// SEP (Student Employment Program) students split the shared Fall hours budget
+// by grade weight, same as always. FWS (Federal Work-Study) students are paid
+// from a separate, per-student semester award and never draw against — or
+// compete for — that shared SEP pool. Default every base-roster entry to SEP
+// so nothing changes until an admin flips a student to FWS.
+STUDENTS.forEach(s => { if (!s.studentType) s.studentType = 'SEP'; });
 
 let WINDOW_START = 9.0, WINDOW_END = 17.0;
 const SLOT = 0.25;
@@ -716,6 +770,7 @@ function bootstrapFromLocalStorage() {
   for (const s of loadCustomStudents()) {
     if (s && s.name && !NAMES.includes(s.name)) {
       if (!s.location) s.location = DEFAULT_LOCATION; // students added before this feature existed
+      if (!s.studentType) s.studentType = 'SEP'; // students added before SEP/FWS existed
       STUDENTS.push(s);
       NAMES.push(s.name);
       DEFAULT_GRADES[s.name] = 5;
@@ -987,7 +1042,12 @@ function currentStateSnapshot() {
 function applyLoadedState(state) {
   if (!state || !Array.isArray(state.students) || !state.students.length) return false;
   STUDENTS.length = 0;
-  STUDENTS.push(...state.students.map(s => ({ ...s, availability: s.availability || [], classes: s.classes || [] })));
+  STUDENTS.push(...state.students.map(s => ({
+    ...s,
+    availability: s.availability || [],
+    classes: s.classes || [],
+    studentType: s.studentType || 'SEP', // saves made before SEP/FWS existed
+  })));
   NAMES.length = 0;
   NAMES.push(...STUDENTS.map(s => s.name));
   for (const n of NAMES) {
@@ -1093,6 +1153,7 @@ async function boot() {
   buildHourSelects();
   if (loaded) applySettingsToInputs(loaded.settings);
   buildFaders();
+  buildRoster();
   wireControls();
   wireAuthControls();
   updateAuthUI();
@@ -1302,12 +1363,14 @@ function enforceBudgetCap(allocated, weight, minShift, cap) {
   return { allocated: kept, trimmed: true, droppedStudents };
 }
 
-function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap, fixedNames) {
+function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap, fixedNames, fwsNames) {
   fixedNames = fixedNames || new Set();
+  fwsNames = fwsNames || new Set();
   const byStudent = {};
   for (const b of blocks) (byStudent[b.student] ??= []).push(b);
   let allAllocated = [];
   let fixedAllocated = [];
+  let fwsAllocated = [];
   for (const [student, blist] of Object.entries(byStudent)) {
     if (fixedNames.has(student)) {
       // Hard schedule: every stated block is honored in full, exactly as entered —
@@ -1316,10 +1379,25 @@ function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap
       continue;
     }
     const allocated = allocateStudentBlocks(blist, goals[student] || 0, minShift);
-    for (const a of allocated) allAllocated.push({ student, ...a });
+    if (fwsNames.has(student)) {
+      // FWS: allocated the same way as SEP (proportionally fit to their own goal
+      // hours) but never trimmed by the SEP budget cap below — that cap belongs
+      // to a different pool of money. They still get their own cap enforced,
+      // though: with many small availability blocks, the minimum-shift floor in
+      // allocateStudentBlocks can bump each one up past a small weekly goal (the
+      // same edge case the SEP path guards against in aggregate) — so re-run the
+      // same shave-then-drop trim here, scoped to just this student against
+      // their own award-derived goal instead of the shared SEP budget.
+      const withStudent = allocated.map(a => ({ student, ...a }));
+      const ownGoal = goals[student] || 0;
+      const trimmed = enforceBudgetCap(withStudent, weight, minShift, ownGoal);
+      fwsAllocated.push(...trimmed.allocated);
+    } else {
+      for (const a of allocated) allAllocated.push({ student, ...a });
+    }
   }
   const capResult = enforceBudgetCap(allAllocated, weight, minShift, budgetCap);
-  allAllocated = capResult.allocated.concat(fixedAllocated);
+  allAllocated = capResult.allocated.concat(fixedAllocated).concat(fwsAllocated);
 
   // Group by (day, location) — not just day — so the concurrency cap is enforced
   // per physical room. Two people scheduled at the same time in different
@@ -1361,7 +1439,8 @@ function recompute() {
   for (const n of NAMES) grades[n] = num('grade_' + slug(n), DEFAULT_GRADES[n]);
 
   const fixedNames = new Set(NAMES.filter(isFixedStudent));
-  const totalGrade = NAMES.reduce((a, n) => a + (fixedNames.has(n) ? 0 : grades[n]), 0) || 1;
+  const fwsNames = new Set(NAMES.filter(isFWSStudent));
+  const totalGrade = NAMES.reduce((a, n) => a + (fixedNames.has(n) || fwsNames.has(n) ? 0 : grades[n]), 0) || 1;
 
   // A fixed schedule is an external hard commitment and can fall outside the
   // department's own open hours (different building, different arrangement) — widen
@@ -1400,13 +1479,24 @@ function recompute() {
   const flexRateWithFri = Math.max(0, weeklyRate - fixedHoursWithFri);
   const flexRateNoFri = Math.max(0, weeklyRate - fixedHoursNoFri);
 
-  const weight = {}, rawTarget = {}, cappedTarget = {}, goalNoFri = {};
+  const weight = {}, rawTarget = {}, cappedTarget = {}, goalNoFri = {}, fwsWeeklyHours = {};
   for (const n of NAMES) {
     if (fixedNames.has(n)) {
       weight[n] = 0;
       rawTarget[n] = capWithFri[n];
       cappedTarget[n] = capWithFri[n];
       goalNoFri[n] = capNoFri[n];
+    } else if (fwsNames.has(n)) {
+      // FWS: goal hours come from the student's own semester award ÷ their
+      // hourly wage ÷ usable weeks — not from any share of the SEP budget.
+      weight[n] = 0;
+      const s = STUDENTS.find(x => x.name === n);
+      const award = Math.max(0, (s && s.semesterAward) || 0);
+      const weeklyHours = wages[n] > 0 ? (award / wages[n]) / usableWeeks : 0;
+      fwsWeeklyHours[n] = weeklyHours;
+      rawTarget[n] = weeklyHours;
+      cappedTarget[n] = Math.min(weeklyHours, capWithFri[n], weeklyCap);
+      goalNoFri[n] = Math.min(weeklyHours, capNoFri[n], weeklyCap);
     } else {
       weight[n] = grades[n] / totalGrade;
       rawTarget[n] = weight[n] * flexRateWithFri;
@@ -1415,8 +1505,8 @@ function recompute() {
     }
   }
 
-  const withFri = buildScenario(blocksWithFri, cappedTarget, weight, minShift, maxConcurrent, flexRateWithFri, fixedNames);
-  const noFri = buildScenario(blocksNoFri, goalNoFri, weight, minShift, maxConcurrent, flexRateNoFri, fixedNames);
+  const withFri = buildScenario(blocksWithFri, cappedTarget, weight, minShift, maxConcurrent, flexRateWithFri, fixedNames, fwsNames);
+  const noFri = buildScenario(blocksNoFri, goalNoFri, weight, minShift, maxConcurrent, flexRateNoFri, fixedNames, fwsNames);
 
   const schedWithFri = {}, schedNoFri = {};
   for (const n of NAMES) { schedWithFri[n] = 0; schedNoFri[n] = 0; }
@@ -1436,7 +1526,7 @@ function recompute() {
     capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
     withFri, noFri, schedWithFri, schedNoFri,
     wages, weeklyCostWithFri, weeklyCostNoFri, semesterCostWithFri,
-    locations, activeLocations, fixedNames,
+    locations, activeLocations, fixedNames, fwsNames, fwsWeeklyHours,
   };
 }
 
@@ -1495,6 +1585,10 @@ function isFixedStudent(name) {
   const s = STUDENTS.find(x => x.name === name);
   return !!(s && s.fixed);
 }
+function isFWSStudent(name) {
+  const s = STUDENTS.find(x => x.name === name);
+  return !!(s && s.studentType === 'FWS');
+}
 function fixedBlockListMarkup(n) {
   const s = STUDENTS.find(x => x.name === n);
   const items = ((s && s.availability) || []).map((b, i) => ({ ...b, i }))
@@ -1519,23 +1613,16 @@ function classBlockListMarkup(n) {
     `<li><span>${esc(c.day)} ${esc(c.course || c.type)} ${fmtClock(c.start)}–${fmtClock(c.end)}</span><button type="button" class="rm-btn" data-i="${c.i}">×</button></li>`
   ).join('');
 }
-function faderMarkup(n, g, wage) {
+// The Grades panel (landing page, left sidebar) stays a compact list — just
+// name + grade slider — so it doesn't grow with the rest of a student's
+// details. Everything else lives in the matching Roster card (Roster tab).
+function gradeCardMarkup(n, g) {
   const id = 'grade_' + slug(n);
-  const wageId = 'wage_' + slug(n);
-  const locId = 'loc_' + slug(n);
-  const availId = 'avail_' + slug(n);
-  const fixId = 'fixed_' + slug(n);
-  const clsId = 'classes_' + slug(n);
   const fixed = isFixedStudent(n);
-  const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
-  const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
-  const student = STUDENTS.find(x => x.name === n) || {};
-  const auto = !!student.autoAvailability;
-  const autoBlocks = auto ? deriveAutoAvailability(student, WINDOW_START, WINDOW_END) : [];
-  const availCount = auto ? autoBlocks.length : (student.availability || []).length;
-  return `<div class="fader${fixed ? ' is-fixed' : ''}" data-student="${esc(n)}">
+  const fws = isFWSStudent(n);
+  return `<div class="fader${fixed ? ' is-fixed' : ''}${fws ? ' is-fws' : ''}" id="gradecard_${slug(n)}" data-student="${esc(n)}">
       <div class="fader-top">
-        <span class="fader-name">${esc(n)}</span>
+        <span class="fader-name">${esc(n)}${fws ? ' <span class="fws-badge">FWS</span>' : ''}</span>
         <span class="fader-value admin-only" id="${id}_val">${g}</span>
         <span class="fader-value-lock viewer-mask">🔒</span>
       </div>
@@ -1546,12 +1633,51 @@ function faderMarkup(n, g, wage) {
       <div class="fader-bottom">
         <span class="fader-weight admin-only" id="${id}_weight"></span>
         <span class="fader-weight-lock viewer-mask">Weight — admin only</span>
+      </div>
+    </div>`;
+}
+// Everything else about a student — wage, location, SEP/FWS + award,
+// availability, Fixed schedule, and class blocks — lives here, one card per
+// student, on the Roster tab.
+function rosterCardMarkup(n, wage) {
+  const wageId = 'wage_' + slug(n);
+  const locId = 'loc_' + slug(n);
+  const availId = 'avail_' + slug(n);
+  const fixId = 'fixed_' + slug(n);
+  const clsId = 'classes_' + slug(n);
+  const typeId = 'type_' + slug(n);
+  const fixed = isFixedStudent(n);
+  const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
+  const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
+  const student = STUDENTS.find(x => x.name === n) || {};
+  const auto = !!student.autoAvailability;
+  const autoBlocks = auto ? deriveAutoAvailability(student, WINDOW_START, WINDOW_END) : [];
+  const availCount = auto ? autoBlocks.length : (student.availability || []).length;
+  const studentType = student.studentType === 'FWS' ? 'FWS' : 'SEP';
+  const award = Math.max(0, student.semesterAward || 0);
+  return `<div class="fader roster-card panel${fixed ? ' is-fixed' : ''}${studentType === 'FWS' ? ' is-fws' : ''}" id="rostercard_${slug(n)}" data-student="${esc(n)}">
+      <div class="fader-top">
+        <span class="fader-name">${esc(n)}${studentType === 'FWS' ? ' <span class="fws-badge">FWS</span>' : ''}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}</span>
+      </div>
+      <div class="fader-bottom">
         <span class="fader-wage admin-only"><input type="number" id="${wageId}" value="${wage.toFixed(2)}" min="0" step="0.05">/hr</span>
         <span class="fader-wage-lock viewer-mask">🔒 /hr</span>
       </div>
       <div class="fader-location">
         <select id="${locId}" class="loc-select">${locationOptionsHTML(locationOf(n))}</select>
         <input type="text" id="${locId}_other" class="loc-other-input" placeholder="New location name — Enter to confirm" hidden>
+      </div>
+      <div class="fader-type admin-only">
+        <label class="type-label">Program
+          <select id="${typeId}" class="type-select">
+            <option value="SEP"${studentType === 'SEP' ? ' selected' : ''}>SEP (shared budget)</option>
+            <option value="FWS"${studentType === 'FWS' ? ' selected' : ''}>FWS (own award)</option>
+          </select>
+        </label>
+        <div class="fws-award-field" id="${typeId}_awardWrap"${studentType === 'FWS' ? '' : ' hidden'}>
+          <label>Semester award ($) <input type="number" id="${typeId}_award" value="${award.toFixed(2)}" min="0" step="10"></label>
+          <span class="fws-award-hint" id="${typeId}_awardHint"></span>
+        </div>
       </div>
       <div class="fader-availability" id="${availId}_wrap"${fixed ? ' hidden' : ''}>
         <div class="avail-label">Availability <span class="count-badge${availCount ? '' : ' zero'}" id="${availId}_count">(${availCount})</span></div>
@@ -1619,14 +1745,38 @@ function refreshAllLocationSelects() {
   }
   refreshGridLocationSelects();
 }
-function wireFader(n) {
+function wireGradeCard(n) {
   const id = 'grade_' + slug(n);
   document.getElementById(id).addEventListener('input', e => {
     document.getElementById(id + '_val').textContent = e.target.value;
     e.target.style.setProperty('--fill', e.target.value / 10 * 100 + '%');
     renderAll();
   });
+}
+function wireRosterCard(n) {
+  const persistIfCustom = () => { if (!BASE_NAMES.has(n)) saveCustomStudents(); };
+
   document.getElementById('wage_' + slug(n)).addEventListener('input', renderAll);
+
+  const typeId = 'type_' + slug(n);
+  const typeSel = document.getElementById(typeId);
+  const awardWrap = document.getElementById(typeId + '_awardWrap');
+  const awardInput = document.getElementById(typeId + '_award');
+  const gradeCardEl = document.getElementById('gradecard_' + slug(n));
+  typeSel.addEventListener('change', () => {
+    const s = STUDENTS.find(x => x.name === n);
+    if (s) s.studentType = typeSel.value;
+    awardWrap.hidden = typeSel.value !== 'FWS';
+    if (gradeCardEl) gradeCardEl.classList.toggle('is-fws', typeSel.value === 'FWS');
+    persistIfCustom();
+    renderAll();
+  });
+  awardInput.addEventListener('input', () => {
+    const s = STUDENTS.find(x => x.name === n);
+    if (s) s.semesterAward = Math.max(0, parseFloat(awardInput.value) || 0);
+    persistIfCustom();
+    renderAll();
+  });
 
   const locId = 'loc_' + slug(n);
   const sel = document.getElementById(locId);
@@ -1651,8 +1801,6 @@ function wireFader(n) {
       sel.value = locationOf(n);
     }
   });
-
-  const persistIfCustom = () => { if (!BASE_NAMES.has(n)) saveCustomStudents(); };
 
   // Availability editor — the only place (besides the Fixed-schedule editor,
   // for fixed students) a student's schedulable hours can be set after
@@ -1712,7 +1860,7 @@ function wireFader(n) {
   const fixChk = document.getElementById(fixId);
   const fixEditor = document.getElementById(fixId + '_editor');
   const fixList = document.getElementById(fixId + '_list');
-  const faderEl = fixChk.closest('.fader');
+  const rosterCardEl = fixChk.closest('.fader');
 
   const refreshFixedList = () => { fixList.innerHTML = fixedBlockListMarkup(n); };
 
@@ -1721,7 +1869,11 @@ function wireFader(n) {
     if (s) s.fixed = fixChk.checked;
     fixEditor.hidden = !fixChk.checked;
     availWrap.hidden = fixChk.checked;
-    faderEl.classList.toggle('is-fixed', fixChk.checked);
+    // The grade slider lives in a separate card now (Grades panel vs. Roster
+    // tab), so both need the is-fixed class kept in sync — the roster card's
+    // own copy is currently a no-op for styling but kept for consistency.
+    rosterCardEl.classList.toggle('is-fixed', fixChk.checked);
+    if (gradeCardEl) gradeCardEl.classList.toggle('is-fixed', fixChk.checked);
     // Both editors render the same underlying s.availability array but only
     // one is ever visible — whichever becomes visible needs a fresh render,
     // since the other one may have changed it since either was last shown.
@@ -1799,14 +1951,22 @@ function wireFader(n) {
 }
 function buildFaders() {
   const wrap = document.getElementById('faderList');
-  wrap.innerHTML = NAMES.map(n => faderMarkup(n, DEFAULT_GRADES[n] ?? 5, WAGES[n] ?? DEFAULT_WAGE)).join('');
-  NAMES.forEach(wireFader);
+  wrap.innerHTML = NAMES.map(n => gradeCardMarkup(n, DEFAULT_GRADES[n] ?? 5)).join('');
+  NAMES.forEach(wireGradeCard);
 }
-// Appends one new fader without touching the DOM (and therefore the live values)
-// of any student already on screen — used when a student is added at runtime.
+function buildRoster() {
+  const wrap = document.getElementById('rosterList');
+  wrap.innerHTML = NAMES.map(n => rosterCardMarkup(n, WAGES[n] ?? DEFAULT_WAGE)).join('');
+  NAMES.forEach(wireRosterCard);
+}
+// Appends one new student's cards without touching the DOM (and therefore the
+// live values) of any student already on screen — used when a student is
+// added at runtime.
 function appendFader(n, g, wage) {
-  document.getElementById('faderList').insertAdjacentHTML('beforeend', faderMarkup(n, g, wage));
-  wireFader(n);
+  document.getElementById('faderList').insertAdjacentHTML('beforeend', gradeCardMarkup(n, g));
+  wireGradeCard(n);
+  document.getElementById('rosterList').insertAdjacentHTML('beforeend', rosterCardMarkup(n, wage));
+  wireRosterCard(n);
 }
 
 // ---------------------------------------------------------------------------
@@ -1825,10 +1985,11 @@ function renderPlan(state) {
       const utilFri = state.capWithFri[n] ? state.schedWithFri[n] / state.capWithFri[n] * 100 : 0;
       const utilNoFri = state.capNoFri[n] ? state.schedNoFri[n] / state.capNoFri[n] * 100 : 0;
       const fixed = state.fixedNames && state.fixedNames.has(n);
+      const fws = state.fwsNames && state.fwsNames.has(n);
       return `<tr>
-        <td>${esc(n)}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}</td>
-        <td class="admin-only">${fixed ? '—' : state.grades[n]}</td>
-        <td class="admin-only">${fixed ? '—' : (state.weight[n] * 100).toFixed(1) + '%'}</td>
+        <td>${esc(n)}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}${fws ? ' <span class="fws-badge">FWS</span>' : ''}</td>
+        <td class="admin-only">${fixed || fws ? '—' : state.grades[n]}</td>
+        <td class="admin-only">${fixed ? '—' : fws ? 'own award' : (state.weight[n] * 100).toFixed(1) + '%'}</td>
         <td>${state.capWithFri[n].toFixed(2)}h</td>
         <td>${state.cappedTarget[n].toFixed(2)}h</td>
         <td>${state.schedWithFri[n].toFixed(2)}h</td>
@@ -1854,7 +2015,10 @@ function renderPlan(state) {
 
   const totalSchedFri = NAMES.reduce((a, n) => a + state.schedWithFri[n], 0);
   const totalCapped = NAMES.reduce((a, n) => a + state.cappedTarget[n], 0);
-  const unalloc = state.weeklyRate - totalSchedFri;
+  // The reserve is specifically about the shared SEP weekly rate, so FWS hours
+  // (paid from a separate award, never drawn from weeklyRate) don't count here.
+  const sepSchedFri = NAMES.reduce((a, n) => a + (state.fwsNames && state.fwsNames.has(n) ? 0 : state.schedWithFri[n]), 0);
+  const unalloc = state.weeklyRate - sepSchedFri;
 
   document.getElementById('planTableWrap').innerHTML = `
     <table class="plan-table">
@@ -1875,7 +2039,7 @@ function renderPlan(state) {
           <td>${(totalSchedFri * state.usableWeeks).toFixed(1)}h</td>
         </tr>
         <tr class="unalloc-row">
-          <td colspan="5">Unallocated / reserve weekly hours (weekly rate − actual scheduled, With-Fri, shared budget across all locations)</td>
+          <td colspan="5">Unallocated / reserve weekly hours (weekly rate − actual SEP scheduled, With-Fri, shared SEP budget across all locations — excludes FWS)</td>
           <td colspan="6">${unalloc.toFixed(2)}h weekly &nbsp;·&nbsp; ${(unalloc * state.usableWeeks).toFixed(1)}h this semester</td>
         </tr>
       </tbody>
@@ -1899,7 +2063,7 @@ function renderPayroll(state) {
     const names = byLoc[loc];
     bodyHtml += `<tr class="location-row"><td colspan="7">${esc(loc)}</td></tr>`;
     bodyHtml += names.map(n => `<tr>
-        <td>${esc(n)}${state.fixedNames && state.fixedNames.has(n) ? ' <span class="fixed-badge">Fixed</span>' : ''}</td>
+        <td>${esc(n)}${state.fixedNames && state.fixedNames.has(n) ? ' <span class="fixed-badge">Fixed</span>' : ''}${state.fwsNames && state.fwsNames.has(n) ? ' <span class="fws-badge">FWS</span>' : ''}</td>
         <td>$${state.wages[n].toFixed(2)}/hr</td>
         <td>${state.schedWithFri[n].toFixed(2)}h</td>
         <td>$${state.weeklyCostWithFri[n].toFixed(2)}</td>
@@ -1924,6 +2088,25 @@ function renderPayroll(state) {
   const totalSchedFri = NAMES.reduce((a, n) => a + state.schedWithFri[n], 0);
   const totalSchedNoFri = NAMES.reduce((a, n) => a + state.schedNoFri[n], 0);
 
+  // FWS pay comes from a separate budget than SEP — break the grand total down
+  // by program so it's obvious at a glance how much of it is SEP money.
+  const fwsList = NAMES.filter(n => state.fwsNames && state.fwsNames.has(n));
+  const sepList = NAMES.filter(n => !(state.fwsNames && state.fwsNames.has(n)));
+  const sumOf = (list, key) => list.reduce((a, n) => a + state[key][n], 0);
+  const programBreakdown = fwsList.length ? `
+        <tr class="subtotal-row">
+          <td>SEP subtotal</td><td></td>
+          <td>${sumOf(sepList, 'schedWithFri').toFixed(2)}h</td><td>$${sumOf(sepList, 'weeklyCostWithFri').toFixed(2)}</td>
+          <td>${sumOf(sepList, 'schedNoFri').toFixed(2)}h</td><td>$${sumOf(sepList, 'weeklyCostNoFri').toFixed(2)}</td>
+          <td>$${sumOf(sepList, 'semesterCostWithFri').toFixed(2)}</td>
+        </tr>
+        <tr class="subtotal-row">
+          <td>FWS subtotal</td><td></td>
+          <td>${sumOf(fwsList, 'schedWithFri').toFixed(2)}h</td><td>$${sumOf(fwsList, 'weeklyCostWithFri').toFixed(2)}</td>
+          <td>${sumOf(fwsList, 'schedNoFri').toFixed(2)}h</td><td>$${sumOf(fwsList, 'weeklyCostNoFri').toFixed(2)}</td>
+          <td>$${sumOf(fwsList, 'semesterCostWithFri').toFixed(2)}</td>
+        </tr>` : '';
+
   document.getElementById('payrollTableWrap').innerHTML = `
     <table class="plan-table">
       <thead><tr>
@@ -1934,6 +2117,7 @@ function renderPayroll(state) {
       </tr></thead>
       <tbody>
         ${bodyHtml}
+        ${programBreakdown}
         <tr class="total-row">
           <td>TOTAL — all locations</td><td></td>
           <td>${totalSchedFri.toFixed(2)}h</td><td>$${totalWeeklyFri.toFixed(2)}</td>
@@ -2198,21 +2382,38 @@ function renderAll() {
   document.getElementById('weeklyRateOut').textContent = state.weeklyRate.toFixed(2) + 'h/wk';
   document.getElementById('hoursWindowOut').textContent =
     `${fmtClock(state.windowStart)}–${fmtClock(state.windowEnd)} (${(state.windowEnd - state.windowStart).toFixed(1)}h/day)`;
-  const semTotal = NAMES.reduce((a, n) => a + state.schedWithFri[n], 0) * state.usableWeeks;
+  // FWS hours/pay come from each student's own semester award, not the shared
+  // Fall hours budget — exclude them from every readout that's making a claim
+  // about that shared budget specifically.
+  const sepOnly = n => !(state.fwsNames && state.fwsNames.has(n));
+  const semTotal = NAMES.filter(sepOnly).reduce((a, n) => a + state.schedWithFri[n], 0) * state.usableWeeks;
   const semOut = document.getElementById('semesterTotalOut');
   semOut.textContent = semTotal.toFixed(1) + 'h / ' + state.fallBudget + 'h';
   semOut.style.color = semTotal > state.fallBudget + 0.5 ? 'var(--alarm)' : '';
-  const weeklyPayroll = NAMES.reduce((a, n) => a + state.weeklyCostWithFri[n], 0);
-  const semesterPayroll = NAMES.reduce((a, n) => a + state.semesterCostWithFri[n], 0);
+  const weeklyPayroll = NAMES.filter(sepOnly).reduce((a, n) => a + state.weeklyCostWithFri[n], 0);
+  const semesterPayroll = NAMES.filter(sepOnly).reduce((a, n) => a + state.semesterCostWithFri[n], 0);
   document.getElementById('weeklyPayrollOut').textContent = '$' + weeklyPayroll.toFixed(2);
   document.getElementById('semesterPayrollOut').textContent = '$' + semesterPayroll.toFixed(2);
 
   NAMES.forEach(n => {
     const id = 'grade_' + slug(n);
     const w = document.getElementById(id + '_weight');
-    if (w) w.textContent = (state.weight[n] * 100).toFixed(1) + '% share';
-
     const s = STUDENTS.find(x => x.name === n);
+    const isFws = state.fwsNames && state.fwsNames.has(n);
+    if (w) {
+      if (isFws) w.textContent = 'FWS · own award';
+      else w.textContent = (state.weight[n] * 100).toFixed(1) + '% share';
+    }
+
+    if (isFws) {
+      const typeId = 'type_' + slug(n);
+      const hint = document.getElementById(typeId + '_awardHint');
+      if (hint) {
+        const weekly = (state.fwsWeeklyHours && state.fwsWeeklyHours[n]) || 0;
+        hint.textContent = `≈ ${weekly.toFixed(2)} h/wk at $${(state.wages[n] || 0).toFixed(2)}/hr`;
+      }
+    }
+
     if (s && s.autoAvailability && !s.fixed) {
       const availId = 'avail_' + slug(n);
       const preview = document.getElementById(availId + '_preview');
@@ -2279,11 +2480,17 @@ function renderAll() {
   }
 
   document.getElementById('summaryOut').textContent =
-    NAMES.map(n => `${n}: grade ${state.grades[n]}, $${state.wages[n].toFixed(2)}/hr`).join('\n') +
-    `\n\nBudget: $${state.fallBudget} fall / ${state.usableWeeks} usable weeks (${state.weeklyRate.toFixed(2)}h/wk)` +
+    NAMES.map(n => {
+      const isFws = state.fwsNames && state.fwsNames.has(n);
+      const s = STUDENTS.find(x => x.name === n);
+      return isFws
+        ? `${n}: FWS, $${state.wages[n].toFixed(2)}/hr, $${Math.max(0, (s && s.semesterAward) || 0).toFixed(2)} semester award`
+        : `${n}: SEP, grade ${state.grades[n]}, $${state.wages[n].toFixed(2)}/hr`;
+    }).join('\n') +
+    `\n\nBudget: $${state.fallBudget} fall / ${state.usableWeeks} usable weeks (${state.weeklyRate.toFixed(2)}h/wk) — SEP only` +
     `\nHours: ${fmtClock(state.windowStart)}-${fmtClock(state.windowEnd)}` +
     `\nPolicy: ${state.weeklyCap}h/wk cap, ${state.minShift}h min shift, ${state.maxConcurrent} max concurrent` +
-    `\nPayroll: $${weeklyPayroll.toFixed(2)}/wk, $${semesterPayroll.toFixed(2)}/semester (With-Fri)`;
+    `\nPayroll (SEP only): $${weeklyPayroll.toFixed(2)}/wk, $${semesterPayroll.toFixed(2)}/semester (With-Fri)`;
 }
 
 function wireControls() {
@@ -2397,6 +2604,12 @@ function wireAddStudentPanel() {
     if (val) { registerLocation(val); newLocOther.hidden = true; newLocSel.innerHTML = locationOptionsHTML(val); refreshAllLocationSelects(); }
   });
 
+  const newStudentType = document.getElementById('newStudentType');
+  const newFwsAwardWrap = document.getElementById('newFwsAwardWrap');
+  newStudentType.addEventListener('change', () => {
+    newFwsAwardWrap.hidden = newStudentType.value !== 'FWS';
+  });
+
   const newAvailAuto = document.getElementById('newAvailAuto');
   const newAvailManualRow = document.getElementById('newAvailManualRow');
   const newAvailList = document.getElementById('newAvailList');
@@ -2455,6 +2668,8 @@ function wireAddStudentPanel() {
       major: document.getElementById('newMajor').value.trim(),
       supervisor: document.getElementById('newSupervisor').value.trim(),
       location,
+      studentType: newStudentType.value === 'FWS' ? 'FWS' : 'SEP',
+      semesterAward: Math.max(0, parseFloat(document.getElementById('newFwsAward').value) || 0),
       autoAvailability: newAvailAuto.checked,
       availability: pendingAvail.map(b => ({ ...b })),
       classes: pendingClasses.map(c => ({ ...c })),
@@ -2473,6 +2688,9 @@ function wireAddStudentPanel() {
     document.getElementById('newName').value = '';
     document.getElementById('newMajor').value = '';
     document.getElementById('newSupervisor').value = '';
+    newStudentType.value = 'SEP';
+    newFwsAwardWrap.hidden = true;
+    document.getElementById('newFwsAward').value = '0';
     newAvailAuto.checked = true;
     syncNewAvailAutoUI();
     let availWarning = '';
