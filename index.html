@@ -167,6 +167,7 @@
 
   .readout { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; justify-content: space-between; }
   .readout .mono { color: var(--ink); font-weight: 500; }
+  .budget-derivation { font-size: 10.5px; color: var(--muted); margin: 2px 0 0; text-align: right; }
 
   .fader { margin-bottom: 12px; }
   .fader:last-child { margin-bottom: 0; }
@@ -522,9 +523,26 @@
       <section class="panel">
         <h2>Budget</h2>
         <div class="field">
-          <label>Fall hours budget <span id="fallBudgetOut" class="mono"></span></label>
-          <input type="number" id="fallBudget" value="800" min="0" step="10">
+          <label>Budget entry <span class="hint">SEP only</span></label>
+          <select id="budgetMode">
+            <option value="hours">Enter hours directly</option>
+            <option value="dollars">Enter $ award ÷ hourly rate</option>
+          </select>
         </div>
+        <div class="field" id="budgetHoursWrap">
+          <label>Fall hours budget (h) <span class="hint">may change as this gets finalized</span></label>
+          <input type="number" id="budgetHours" value="390" min="0" step="5">
+        </div>
+        <div class="field" id="budgetDollarsWrap" hidden>
+          <label>Semester award ($)</label>
+          <input type="number" id="budgetAward" value="5850" min="0" step="10">
+        </div>
+        <div class="field" id="budgetRateWrap" hidden>
+          <label>Hourly rate ($/hr)</label>
+          <input type="number" id="budgetRate" value="15" min="0.01" step="0.25">
+        </div>
+        <div class="readout"><span>Fall hours budget</span><span id="fallBudgetOut" class="mono">—</span></div>
+        <p class="hint budget-derivation" id="fallBudgetDerivation"></p>
         <div class="field">
           <label>Usable weeks <span id="usableWeeksOut" class="mono"></span></label>
           <input type="number" id="usableWeeks" value="13" min="1" step="1">
@@ -1033,7 +1051,8 @@ function currentStateSnapshot() {
     grades, wages,
     knownLocations: [...KNOWN_LOCATIONS],
     settings: {
-      fallBudget: byId('fallBudget'), usableWeeks: byId('usableWeeks'),
+      budgetMode: byId('budgetMode'), budgetHours: byId('budgetHours'),
+      budgetAward: byId('budgetAward'), budgetRate: byId('budgetRate'), usableWeeks: byId('usableWeeks'),
       weeklyCap: byId('weeklyCap'), minShift: byId('minShift'), maxConcurrent: byId('maxConcurrent'),
       openTime: byId('openTime'), closeTime: byId('closeTime'),
     },
@@ -1062,7 +1081,21 @@ function applyLoadedState(state) {
 function applySettingsToInputs(settings) {
   if (!settings) return;
   const setIfPresent = (id, v) => { if (v !== undefined && v !== null && v !== '') { const el = document.getElementById(id); if (el) el.value = v; } };
-  ['fallBudget', 'usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent', 'openTime', 'closeTime']
+  if (settings.budgetMode !== undefined || settings.budgetHours !== undefined || settings.budgetAward !== undefined) {
+    setIfPresent('budgetMode', settings.budgetMode);
+    setIfPresent('budgetHours', settings.budgetHours);
+    setIfPresent('budgetAward', settings.budgetAward);
+    setIfPresent('budgetRate', settings.budgetRate);
+  } else if (settings.fallBudget !== undefined) {
+    // Saved before either budget-entry mode existed — settings.fallBudget was
+    // just a plain hours number back then. Restore it directly as "hours" mode
+    // so nothing is invented (no assumed $ rate); it's exactly the number that
+    // was set, right where direct-entry mode expects to find it.
+    setIfPresent('budgetMode', 'hours');
+    setIfPresent('budgetHours', settings.fallBudget);
+  }
+  syncBudgetModeUI();
+  ['usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent', 'openTime', 'closeTime']
     .forEach(id => setIfPresent(id, settings[id]));
 }
 async function loadSavedState() {
@@ -1418,7 +1451,21 @@ function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap
 }
 
 function recompute() {
-  const fallBudget = num('fallBudget', 800);
+  // The hours cap can be entered either way: directly as hours (handy while
+  // the real award/workflow is still being nailed down and that number might
+  // just change outright), or as a semester $ award ÷ hourly rate, which
+  // keeps the hours number visibly traceable to the award letter it came from.
+  const budgetModeEl = document.getElementById('budgetMode');
+  const budgetMode = (budgetModeEl && budgetModeEl.value === 'dollars') ? 'dollars' : 'hours';
+  let budgetHours = null, budgetAward = null, budgetRate = null, fallBudget;
+  if (budgetMode === 'dollars') {
+    budgetAward = Math.max(0, num('budgetAward', 5850));
+    budgetRate = Math.max(0.01, num('budgetRate', 15));
+    fallBudget = budgetAward / budgetRate;
+  } else {
+    budgetHours = Math.max(0, num('budgetHours', 390));
+    fallBudget = budgetHours;
+  }
   const usableWeeks = Math.max(1, num('usableWeeks', 13));
   const weeklyCap = num('weeklyCap', 20);
   const minShift = num('minShift', 1);
@@ -1521,7 +1568,7 @@ function recompute() {
   }
 
   return {
-    fallBudget, usableWeeks, weeklyCap, minShift, maxConcurrent, weeklyRate, grades, totalGrade,
+    fallBudget, budgetMode, budgetHours, budgetAward, budgetRate, usableWeeks, weeklyCap, minShift, maxConcurrent, weeklyRate, grades, totalGrade,
     windowStart: WINDOW_START, windowEnd: WINDOW_END, deptStart, deptEnd,
     capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
     withFri, noFri, schedWithFri, schedNoFri,
@@ -2377,7 +2424,13 @@ function renderAll() {
   const state = recompute();
   lastState = state;
 
-  document.getElementById('fallBudgetOut').textContent = '$' + state.fallBudget;
+  document.getElementById('fallBudgetOut').textContent = state.fallBudget.toFixed(1) + 'h';
+  const budgetDerivation = document.getElementById('fallBudgetDerivation');
+  if (budgetDerivation) {
+    budgetDerivation.textContent = state.budgetMode === 'dollars'
+      ? `= $${state.budgetAward.toFixed(2)} ÷ $${state.budgetRate.toFixed(2)}/hr`
+      : '(entered directly — subject to change)';
+  }
   document.getElementById('usableWeeksOut').textContent = state.usableWeeks;
   document.getElementById('weeklyRateOut').textContent = state.weeklyRate.toFixed(2) + 'h/wk';
   document.getElementById('hoursWindowOut').textContent =
@@ -2388,7 +2441,7 @@ function renderAll() {
   const sepOnly = n => !(state.fwsNames && state.fwsNames.has(n));
   const semTotal = NAMES.filter(sepOnly).reduce((a, n) => a + state.schedWithFri[n], 0) * state.usableWeeks;
   const semOut = document.getElementById('semesterTotalOut');
-  semOut.textContent = semTotal.toFixed(1) + 'h / ' + state.fallBudget + 'h';
+  semOut.textContent = semTotal.toFixed(1) + 'h / ' + state.fallBudget.toFixed(1) + 'h';
   semOut.style.color = semTotal > state.fallBudget + 0.5 ? 'var(--alarm)' : '';
   const weeklyPayroll = NAMES.filter(sepOnly).reduce((a, n) => a + state.weeklyCostWithFri[n], 0);
   const semesterPayroll = NAMES.filter(sepOnly).reduce((a, n) => a + state.semesterCostWithFri[n], 0);
@@ -2467,7 +2520,7 @@ function renderAll() {
 
   const dropped = [...new Set([...state.withFri.droppedStudents, ...state.noFri.droppedStudents])];
   if (state.withFri.trimmed || state.noFri.trimmed) {
-    let msg = `↓ Hours trimmed to stay within the ${state.fallBudget}h budget`;
+    let msg = `↓ Hours trimmed to stay within the ${state.fallBudget.toFixed(1)}h budget`;
     if (dropped.length) msg += ` — ${esc(dropped.join(', '))} lost all hours in at least one scenario`;
     lines.push(msg);
   }
@@ -2487,16 +2540,32 @@ function renderAll() {
         ? `${n}: FWS, $${state.wages[n].toFixed(2)}/hr, $${Math.max(0, (s && s.semesterAward) || 0).toFixed(2)} semester award`
         : `${n}: SEP, grade ${state.grades[n]}, $${state.wages[n].toFixed(2)}/hr`;
     }).join('\n') +
-    `\n\nBudget: $${state.fallBudget} fall / ${state.usableWeeks} usable weeks (${state.weeklyRate.toFixed(2)}h/wk) — SEP only` +
+    `\n\nBudget: ${state.budgetMode === 'dollars' ? `$${state.budgetAward.toFixed(2)} ÷ $${state.budgetRate.toFixed(2)}/hr = ` : ''}${state.fallBudget.toFixed(1)}h fall / ${state.usableWeeks} usable weeks (${state.weeklyRate.toFixed(2)}h/wk) — SEP only` +
     `\nHours: ${fmtClock(state.windowStart)}-${fmtClock(state.windowEnd)}` +
     `\nPolicy: ${state.weeklyCap}h/wk cap, ${state.minShift}h min shift, ${state.maxConcurrent} max concurrent` +
     `\nPayroll (SEP only): $${weeklyPayroll.toFixed(2)}/wk, $${semesterPayroll.toFixed(2)}/semester (With-Fri)`;
 }
 
+function syncBudgetModeUI() {
+  const modeSel = document.getElementById('budgetMode');
+  const hoursWrap = document.getElementById('budgetHoursWrap');
+  const dollarsWrap = document.getElementById('budgetDollarsWrap');
+  const rateWrap = document.getElementById('budgetRateWrap');
+  if (!modeSel || !hoursWrap || !dollarsWrap || !rateWrap) return;
+  const isHours = modeSel.value !== 'dollars';
+  hoursWrap.hidden = !isHours;
+  dollarsWrap.hidden = isHours;
+  rateWrap.hidden = isHours;
+}
 function wireControls() {
-  ['fallBudget', 'usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent'].forEach(id => {
+  document.getElementById('budgetMode').addEventListener('change', () => {
+    syncBudgetModeUI();
+    renderAll();
+  });
+  ['budgetHours', 'budgetAward', 'budgetRate', 'usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent'].forEach(id => {
     document.getElementById(id).addEventListener('input', renderAll);
   });
+  syncBudgetModeUI();
   document.getElementById('saveBtn').addEventListener('click', saveState);
   document.querySelectorAll('.presets button').forEach(btn => {
     btn.addEventListener('click', () => {
