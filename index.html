@@ -168,6 +168,7 @@
   .readout { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; justify-content: space-between; }
   .readout .mono { color: var(--ink); font-weight: 500; }
   .budget-derivation { font-size: 10.5px; color: var(--muted); margin: 2px 0 0; text-align: right; }
+  .budget-derivation.is-warn { color: var(--amber); font-weight: 600; }
 
   .fader { margin-bottom: 12px; }
   .fader:last-child { margin-bottom: 0; }
@@ -523,6 +524,10 @@
       <section class="panel">
         <h2>Budget</h2>
         <div class="field">
+          <label>Annual award (fiscal year, h) <span class="hint">fall + spring combined</span></label>
+          <input type="number" id="annualAward" value="1750" min="0" step="5">
+        </div>
+        <div class="field">
           <label>Budget entry <span class="hint">SEP only</span></label>
           <select id="budgetMode">
             <option value="hours">Enter hours directly</option>
@@ -543,6 +548,8 @@
         </div>
         <div class="readout"><span>Fall hours budget</span><span id="fallBudgetOut" class="mono">—</span></div>
         <p class="hint budget-derivation" id="fallBudgetDerivation"></p>
+        <div class="readout"><span>Spring hours remaining</span><span id="springRemainingOut" class="mono">—</span></div>
+        <p class="hint budget-derivation" id="springRemainingHint"></p>
         <div class="field">
           <label>Usable weeks <span id="usableWeeksOut" class="mono"></span></label>
           <input type="number" id="usableWeeks" value="13" min="1" step="1">
@@ -1051,6 +1058,7 @@ function currentStateSnapshot() {
     grades, wages,
     knownLocations: [...KNOWN_LOCATIONS],
     settings: {
+      annualAward: byId('annualAward'),
       budgetMode: byId('budgetMode'), budgetHours: byId('budgetHours'),
       budgetAward: byId('budgetAward'), budgetRate: byId('budgetRate'), usableWeeks: byId('usableWeeks'),
       weeklyCap: byId('weeklyCap'), minShift: byId('minShift'), maxConcurrent: byId('maxConcurrent'),
@@ -1081,6 +1089,7 @@ function applyLoadedState(state) {
 function applySettingsToInputs(settings) {
   if (!settings) return;
   const setIfPresent = (id, v) => { if (v !== undefined && v !== null && v !== '') { const el = document.getElementById(id); if (el) el.value = v; } };
+  setIfPresent('annualAward', settings.annualAward);
   if (settings.budgetMode !== undefined || settings.budgetHours !== undefined || settings.budgetAward !== undefined) {
     setIfPresent('budgetMode', settings.budgetMode);
     setIfPresent('budgetHours', settings.budgetHours);
@@ -1466,6 +1475,13 @@ function recompute() {
     budgetHours = Math.max(0, num('budgetHours', 390));
     fallBudget = budgetHours;
   }
+  // The fiscal-year (fall + spring) award is a fixed ceiling handed down from
+  // the department; the fall budget above is drawn from it, and whatever's
+  // left over is what's available to plan spring with once fall is settled.
+  const annualAward = Math.max(0, num('annualAward', 1750));
+  const springRemaining = Math.max(0, annualAward - fallBudget);
+  const overAnnualAward = fallBudget > annualAward;
+
   const usableWeeks = Math.max(1, num('usableWeeks', 13));
   const weeklyCap = num('weeklyCap', 20);
   const minShift = num('minShift', 1);
@@ -1568,7 +1584,7 @@ function recompute() {
   }
 
   return {
-    fallBudget, budgetMode, budgetHours, budgetAward, budgetRate, usableWeeks, weeklyCap, minShift, maxConcurrent, weeklyRate, grades, totalGrade,
+    fallBudget, budgetMode, budgetHours, budgetAward, budgetRate, annualAward, springRemaining, overAnnualAward, usableWeeks, weeklyCap, minShift, maxConcurrent, weeklyRate, grades, totalGrade,
     windowStart: WINDOW_START, windowEnd: WINDOW_END, deptStart, deptEnd,
     capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
     withFri, noFri, schedWithFri, schedNoFri,
@@ -2431,6 +2447,14 @@ function renderAll() {
       ? `= $${state.budgetAward.toFixed(2)} ÷ $${state.budgetRate.toFixed(2)}/hr`
       : '(entered directly — subject to change)';
   }
+  document.getElementById('springRemainingOut').textContent = state.springRemaining.toFixed(1) + 'h';
+  const springHint = document.getElementById('springRemainingHint');
+  if (springHint) {
+    springHint.textContent = state.overAnnualAward
+      ? `⚠ fall (${state.fallBudget.toFixed(1)}h) exceeds the ${state.annualAward.toFixed(1)}h annual award`
+      : `= ${state.annualAward.toFixed(1)}h annual − ${state.fallBudget.toFixed(1)}h fall`;
+    springHint.classList.toggle('is-warn', state.overAnnualAward);
+  }
   document.getElementById('usableWeeksOut').textContent = state.usableWeeks;
   document.getElementById('weeklyRateOut').textContent = state.weeklyRate.toFixed(2) + 'h/wk';
   document.getElementById('hoursWindowOut').textContent =
@@ -2525,6 +2549,10 @@ function renderAll() {
     lines.push(msg);
   }
 
+  if (state.overAnnualAward) {
+    lines.push(`⚠ Fall hours budget (${state.fallBudget.toFixed(1)}h) exceeds the ${state.annualAward.toFixed(1)}h annual award — nothing would be left for spring`);
+  }
+
   if (lines.length) {
     banner.hidden = false;
     banner.innerHTML = lines.join('<br>');
@@ -2541,6 +2569,7 @@ function renderAll() {
         : `${n}: SEP, grade ${state.grades[n]}, $${state.wages[n].toFixed(2)}/hr`;
     }).join('\n') +
     `\n\nBudget: ${state.budgetMode === 'dollars' ? `$${state.budgetAward.toFixed(2)} ÷ $${state.budgetRate.toFixed(2)}/hr = ` : ''}${state.fallBudget.toFixed(1)}h fall / ${state.usableWeeks} usable weeks (${state.weeklyRate.toFixed(2)}h/wk) — SEP only` +
+    `\nAnnual award: ${state.annualAward.toFixed(1)}h fiscal year — ${state.fallBudget.toFixed(1)}h fall leaves ${state.springRemaining.toFixed(1)}h for spring` +
     `\nHours: ${fmtClock(state.windowStart)}-${fmtClock(state.windowEnd)}` +
     `\nPolicy: ${state.weeklyCap}h/wk cap, ${state.minShift}h min shift, ${state.maxConcurrent} max concurrent` +
     `\nPayroll (SEP only): $${weeklyPayroll.toFixed(2)}/wk, $${semesterPayroll.toFixed(2)}/semester (With-Fri)`;
@@ -2562,7 +2591,7 @@ function wireControls() {
     syncBudgetModeUI();
     renderAll();
   });
-  ['budgetHours', 'budgetAward', 'budgetRate', 'usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent'].forEach(id => {
+  ['annualAward', 'budgetHours', 'budgetAward', 'budgetRate', 'usableWeeks', 'weeklyCap', 'minShift', 'maxConcurrent'].forEach(id => {
     document.getElementById(id).addEventListener('input', renderAll);
   });
   syncBudgetModeUI();
