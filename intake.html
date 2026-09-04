@@ -96,6 +96,16 @@
   }
   .primary-btn:hover { filter: brightness(1.06); }
   .primary-btn:disabled { opacity: 0.6; cursor: default; }
+  .secondary-btn {
+    width: 100%; margin-top: 4px; background: transparent; color: var(--accent);
+    border: 1.5px solid var(--accent); border-radius: 7px; padding: 10.5px; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  .secondary-btn:hover { background: var(--surface-2); }
+  .secondary-btn:disabled { opacity: 0.6; cursor: default; }
+  .secondary-btn[hidden] { display: none; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .primary-btn, .btn-row .secondary-btn { margin-top: 4px; }
   #formMsg { min-height: 16px; margin-top: 8px; font-size: 12.5px; }
   .msg-ok { color: var(--accent); }
   .msg-err { color: var(--alarm); }
@@ -107,6 +117,8 @@
   .done-panel h2 { font-size: 17px; margin-bottom: 6px; }
   .done-panel p { color: var(--muted); font-size: 12.5px; margin: 0; }
   .loading-note { color: var(--muted); font-size: 12px; }
+  .loaded-note { margin: 6px 0 0; font-size: 11.5px; color: var(--accent); font-weight: 500; }
+  .loaded-note[hidden] { display: none; }
 </style>
 
 <div class="wrap">
@@ -120,6 +132,7 @@
     <div class="field">
       <label>Name</label>
       <select id="nameSelect"><option value="">Loading roster…</option></select>
+      <p class="loaded-note" id="loadedNote" hidden></p>
     </div>
     <label class="checkbox-row">
       <input type="checkbox" id="notListedChk">
@@ -168,7 +181,10 @@
   </section>
 
   <div class="panel">
-    <button type="button" class="primary-btn" id="submitBtn">Submit</button>
+    <div class="btn-row">
+      <button type="button" class="primary-btn" id="submitBtn">Submit</button>
+      <button type="button" class="secondary-btn" id="confirmBtn" hidden>Confirm — looks good, no changes</button>
+    </div>
     <p id="formMsg"></p>
     <p class="loading-note">Submitting this replaces your entire availability and class schedule on file with what's listed above — it's a full update, not an addition to what's already there.</p>
   </div>
@@ -237,6 +253,11 @@ function setMsg(text, kind) {
   el.className = kind === 'ok' ? 'msg-ok' : kind === 'err' ? 'msg-err' : '';
 }
 
+// Keyed by name once loaded, so picking a name from the dropdown can load
+// that student's CURRENT availability/classes into the editors below —
+// students are reviewing and confirming what's on file, not starting blank.
+let ROSTER_BY_NAME = {};
+
 async function loadRosterNames() {
   const sel = document.getElementById('nameSelect');
   try {
@@ -247,6 +268,8 @@ async function loadRosterNames() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const row = await resp.json();
     const students = (row && row.data && Array.isArray(row.data.students)) ? row.data.students : [];
+    ROSTER_BY_NAME = {};
+    students.forEach(s => { if (s && s.name) ROSTER_BY_NAME[s.name] = s; });
     const names = students.map(s => s.name).filter(Boolean).sort((a, b) => a.localeCompare(b));
     sel.innerHTML = '<option value="">Select your name…</option>' +
       names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
@@ -264,12 +287,19 @@ function wireForm() {
   const nameSelect = document.getElementById('nameSelect');
   const newNameWrap = document.getElementById('newNameWrap');
   const majorWrap = document.getElementById('majorWrap');
-  notListedChk.addEventListener('change', () => {
-    newNameWrap.hidden = !notListedChk.checked;
-    majorWrap.hidden = !notListedChk.checked;
-    nameSelect.disabled = notListedChk.checked;
-    if (notListedChk.checked) nameSelect.value = '';
-  });
+  const loadedNote = document.getElementById('loadedNote');
+  const submitBtn = document.getElementById('submitBtn');
+  const confirmBtn = document.getElementById('confirmBtn');
+
+  // The Confirm button only makes sense for a student who's actually
+  // reviewing something already on file — hide it for new-student mode or
+  // before a name's been picked, and relabel Submit so the two buttons read
+  // clearly side by side ("Submit updates" vs. "Confirm — no changes").
+  const syncConfirmBtnUI = () => {
+    const showConfirm = !notListedChk.checked && !!nameSelect.value;
+    confirmBtn.hidden = !showConfirm;
+    submitBtn.textContent = showConfirm ? 'Submit updates' : 'Submit';
+  };
 
   const availAuto = document.getElementById('availAuto');
   const availManualRow = document.getElementById('availManualRow');
@@ -280,6 +310,50 @@ function wireForm() {
   };
   availAuto.addEventListener('change', syncAvailAutoUI);
   syncAvailAutoUI();
+
+  const clearScheduleFields = () => {
+    pendingAvail = [];
+    pendingClasses = [];
+    renderPendingAvail();
+    renderPendingClasses();
+    loadedNote.hidden = true;
+  };
+
+  notListedChk.addEventListener('change', () => {
+    newNameWrap.hidden = !notListedChk.checked;
+    majorWrap.hidden = !notListedChk.checked;
+    nameSelect.disabled = notListedChk.checked;
+    if (notListedChk.checked) {
+      nameSelect.value = '';
+      // A genuinely new student has nothing on file yet — blank slate, and
+      // don't carry over whatever an earlier existing-student pick loaded.
+      availAuto.checked = true;
+      syncAvailAutoUI();
+      clearScheduleFields();
+    }
+    syncConfirmBtnUI();
+  });
+
+  // Picking an existing name loads THEIR current availability/classes into
+  // the editors below, so this is a review-and-confirm step rather than
+  // starting from nothing — matches how the console's own Roster tab already
+  // shows a student's current info for editing.
+  nameSelect.addEventListener('change', () => {
+    const name = nameSelect.value;
+    const student = name ? ROSTER_BY_NAME[name] : null;
+    if (!student) { clearScheduleFields(); return; }
+    availAuto.checked = !!student.autoAvailability;
+    syncAvailAutoUI();
+    pendingAvail = Array.isArray(student.availability) ? student.availability.map(b => ({ ...b })) : [];
+    pendingClasses = Array.isArray(student.classes) ? student.classes.map(c => ({ ...c })) : [];
+    renderPendingAvail();
+    renderPendingClasses();
+    loadedNote.hidden = false;
+    loadedNote.textContent = `Loaded ${name}'s current info on file — review below. If it's still accurate, tap Confirm. If something changed, update it and tap Submit updates.`;
+    setMsg('', null);
+    syncConfirmBtnUI();
+  });
+  syncConfirmBtnUI();
 
   document.getElementById('addAvailBtn').addEventListener('click', () => {
     const day = document.getElementById('availDay').value;
@@ -318,7 +392,11 @@ function wireForm() {
     renderPendingClasses();
   });
 
-  document.getElementById('submitBtn').addEventListener('click', async () => {
+  // Shared by both buttons — Submit and Confirm send the same payload
+  // (whatever's currently in the editors), differing only in confirmed_only:
+  // true means "I looked at this and it's still accurate, no edits needed,"
+  // which is what lets the console show a per-student confirmed checklist.
+  async function submitIntake(confirmedOnly) {
     const isNew = notListedChk.checked;
     const name = isNew ? document.getElementById('newNameInput').value.trim() : nameSelect.value;
     if (!name) { setMsg(isNew ? 'Enter your full name.' : 'Select your name from the list.', 'err'); return; }
@@ -326,9 +404,9 @@ function wireForm() {
       setMsg('Add at least one availability block, or check "Auto" above.', 'err');
       return;
     }
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true;
-    setMsg('Submitting…', null);
+    submitBtn.disabled = true;
+    confirmBtn.disabled = true;
+    setMsg(confirmedOnly ? 'Confirming…' : 'Submitting…', null);
     try {
       const resp = await fetch(INTAKE_URL, {
         method: 'POST',
@@ -340,6 +418,7 @@ function wireForm() {
           auto_availability: availAuto.checked,
           availability: pendingAvail,
           classes: pendingClasses,
+          confirmed_only: confirmedOnly,
         }),
       });
       if (!resp.ok) {
@@ -349,14 +428,19 @@ function wireForm() {
       document.getElementById('intakeForm').closest('.wrap').querySelectorAll('.panel').forEach(p => {
         if (p.id !== 'donePanel') p.hidden = true;
       });
-      document.getElementById('doneMsg').textContent =
-        `Your info was submitted for ${name}${isNew ? ' (new student)' : ''}. Paul will review it and add it to the schedule.`;
+      document.getElementById('doneMsg').textContent = confirmedOnly
+        ? `Thanks — you confirmed ${name}'s info is still accurate. Paul can see that on his end.`
+        : `Your info was submitted for ${name}${isNew ? ' (new student)' : ''}. Paul will review it and add it to the schedule.`;
       document.getElementById('donePanel').hidden = false;
     } catch (e) {
       setMsg('Submission failed — check your connection and try again. (' + (e && e.message ? e.message : 'error') + ')', 'err');
-      btn.disabled = false;
+      submitBtn.disabled = false;
+      confirmBtn.disabled = false;
     }
-  });
+  }
+
+  submitBtn.addEventListener('click', () => submitIntake(false));
+  confirmBtn.addEventListener('click', () => submitIntake(true));
 }
 
 async function boot() {

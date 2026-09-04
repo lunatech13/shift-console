@@ -299,6 +299,22 @@
     display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-bottom: 16px;
   }
   .roster-card.fader { margin-bottom: 0; }
+  .remove-student-row { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+  .remove-student-btn {
+    background: none; border: none; color: var(--muted); font-size: 11px; cursor: pointer;
+    padding: 2px 0; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .remove-student-btn:hover { color: var(--alarm); }
+  .remove-confirm { display: flex; flex-direction: column; gap: 6px; }
+  .remove-confirm[hidden] { display: none; }
+  .remove-confirm span { font-size: 11px; color: var(--ink); }
+  .remove-confirm-actions { display: flex; gap: 6px; }
+  .remove-confirm-yes, .remove-confirm-cancel {
+    border-radius: 6px; padding: 5px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer;
+  }
+  .remove-confirm-yes { background: var(--alarm); color: var(--alarm-ink); border: 1px solid var(--alarm); }
+  .remove-confirm-yes:hover { filter: brightness(1.08); }
+  .remove-confirm-cancel { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
 
   .presets { display: flex; gap: 6px; margin-top: 10px; }
   .presets button {
@@ -425,6 +441,20 @@
   .intake-apply-btn:hover, .intake-review-btn:hover { background: var(--accent); color: var(--accent-ink); }
   .intake-reject-btn { color: var(--alarm); }
   .intake-reject-btn:hover { background: var(--alarm); color: var(--alarm-ink); border-color: var(--alarm); }
+
+  /* --- Confirmation Status panel --- */
+  .confirm-status-panel { margin-bottom: 14px; }
+  ul.confirm-status-list {
+    list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px;
+    max-height: 260px; overflow-y: auto;
+  }
+  .confirm-status-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px;
+    padding: 6px 10px; font-size: 12.5px; color: var(--ink);
+  }
+  .confirm-status-badge { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .confirm-status-item.is-confirmed .confirm-status-badge { color: var(--accent); }
 
   /* --- Add Student panel --- */
   .add-student .mini-head {
@@ -684,6 +714,11 @@
           <h2>Pending Intake <span class="hint">student-submitted updates, awaiting review</span></h2>
           <p class="hint" id="intakeAutoNote" hidden></p>
           <ul class="intake-list" id="intakeQueueList"></ul>
+        </section>
+
+        <section class="panel confirm-status-panel" id="confirmStatusPanel" hidden>
+          <h2>Confirmation Status <span class="hint">who's reviewed their info on the intake form</span></h2>
+          <ul class="confirm-status-list" id="confirmStatusList"></ul>
         </section>
 
         <div class="roster-grid" id="rosterList"></div>
@@ -1291,7 +1326,16 @@ async function processIntakeSubmissions() {
   pendingIntakeQueue = [];
   if (!isAdminSignedIn()) return;
   const rows = await fetchPendingIntake();
+  const confirmedIds = [];
   for (const sub of rows) {
+    if (sub.confirmed_only) {
+      // "Still accurate, no changes" — nothing to merge or review, just close
+      // it out (status: applied) so it doesn't linger in the pending queue.
+      // It's still counted in the Confirmation Status panel via its own
+      // history query below, independent of status.
+      confirmedIds.push(sub.id);
+      continue;
+    }
     const matchedName = sub.is_new_student ? null : matchIntakeStudent(sub.student_name);
     if (matchedName && ACCESS_CONFIG.intake_auto_apply) {
       applyIntakeToStudent(sub, matchedName);
@@ -1300,6 +1344,53 @@ async function processIntakeSubmissions() {
       pendingIntakeQueue.push(Object.assign({}, sub, { matchedName }));
     }
   }
+  if (confirmedIds.length) await markIntakeApplied(confirmedIds);
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation Status panel — separate from the Pending Intake queue above.
+// A "Confirm — looks good, no changes" click on the intake form inserts a
+// confirmed_only row for that student; this reads ALL such rows (any status)
+// to show, per current roster name, whether and when they last confirmed.
+// Read-only — never merges or writes to app_state.
+// ---------------------------------------------------------------------------
+let confirmStatusMap = {}; // roster name -> ISO timestamp of their latest confirmation, or absent if never
+async function fetchIntakeHistory() {
+  if (!supabaseConfigured || !isAdminSignedIn()) return [];
+  try {
+    const resp = await fetch(INTAKE_TABLE_URL + '?confirmed_only=eq.true&select=student_name,created_at&order=created_at.desc', {
+      headers: supabaseHeaders({ Authorization: 'Bearer ' + authSession.access_token }),
+      cache: 'no-store',
+    });
+    if (!resp.ok) return [];
+    const rows = await resp.json();
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) { return []; }
+}
+async function refreshConfirmStatus() {
+  confirmStatusMap = {};
+  if (!isAdminSignedIn()) return;
+  const rows = await fetchIntakeHistory();
+  // Newest first, so the first match per name is their most recent confirmation.
+  for (const row of rows) {
+    const matched = matchIntakeStudent(row.student_name);
+    if (matched && !confirmStatusMap[matched]) confirmStatusMap[matched] = row.created_at;
+  }
+}
+function renderConfirmStatusPanel() {
+  const panel = document.getElementById('confirmStatusPanel');
+  const list = document.getElementById('confirmStatusList');
+  if (!panel || !list) return;
+  if (!isAdminSignedIn() || !NAMES.length) { panel.hidden = true; return; }
+  panel.hidden = false;
+  list.innerHTML = NAMES.map(n => {
+    const ts = confirmStatusMap[n];
+    const when = ts ? new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
+    return `<li class="confirm-status-item ${ts ? 'is-confirmed' : 'is-pending'}">
+      <span>${esc(n)}</span>
+      <span class="confirm-status-badge">${ts ? `✓ Confirmed ${when}` : 'Not yet confirmed'}</span>
+    </li>`;
+  }).join('');
 }
 function intakeItemLabel(item) {
   return item.matchedName
@@ -1393,6 +1484,7 @@ async function boot() {
   }
 
   await processIntakeSubmissions();
+  await refreshConfirmStatus();
 
   buildHourSelects();
   if (loaded) applySettingsToInputs(loaded.settings);
@@ -1402,6 +1494,7 @@ async function boot() {
   wireAuthControls();
   wireIntakePanel();
   renderIntakePanel();
+  renderConfirmStatusPanel();
   updateAuthUI();
   updateSaveUI();
   renderAll();
@@ -1992,6 +2085,16 @@ function rosterCardMarkup(n, wage) {
           <ul class="block-list" id="${clsId}_list">${classBlockListMarkup(n)}</ul>
         </div>
       </details>
+      <div class="remove-student-row">
+        <button type="button" class="remove-student-btn">Remove student…</button>
+        <div class="remove-confirm" hidden>
+          <span>Remove ${esc(n)} from the roster? Takes effect once you Save.</span>
+          <div class="remove-confirm-actions">
+            <button type="button" class="remove-confirm-yes">Yes, remove</button>
+            <button type="button" class="remove-confirm-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>`;
 }
 function setStudentLocation(name, loc) {
@@ -2215,6 +2318,46 @@ function wireRosterCard(n) {
     refreshClassList();
     renderAll();
   });
+
+  // Remove student — a two-step inline confirm (no native confirm() dialog,
+  // consistent with the rest of this app) rather than a single click, since
+  // this is a bigger action than any other control on this card.
+  const removeBtn = rosterCardEl.querySelector('.remove-student-btn');
+  const removeConfirm = rosterCardEl.querySelector('.remove-confirm');
+  if (removeBtn && removeConfirm) {
+    removeBtn.addEventListener('click', () => {
+      removeBtn.hidden = true;
+      removeConfirm.hidden = false;
+    });
+    removeConfirm.querySelector('.remove-confirm-cancel').addEventListener('click', () => {
+      removeConfirm.hidden = true;
+      removeBtn.hidden = false;
+    });
+    removeConfirm.querySelector('.remove-confirm-yes').addEventListener('click', () => {
+      removeStudent(n);
+    });
+  }
+}
+// Removes a student from the working roster (both cards, plus the underlying
+// STUDENTS/NAMES/grade/wage state). Like everything else here, this is a
+// local, in-browser change until the next Save — nothing is deleted from the
+// database until then. Surgically removes just this student's two DOM cards
+// rather than rebuilding every card, so every OTHER student's in-progress
+// (unsaved) grade/wage slider values are left untouched.
+function removeStudent(name) {
+  const idx = STUDENTS.findIndex(x => x.name === name);
+  if (idx === -1) return;
+  STUDENTS.splice(idx, 1);
+  const nameIdx = NAMES.indexOf(name);
+  if (nameIdx !== -1) NAMES.splice(nameIdx, 1);
+  delete DEFAULT_GRADES[name];
+  delete WAGES[name];
+  saveCustomStudents();
+  document.getElementById('gradecard_' + slug(name))?.remove();
+  document.getElementById('rostercard_' + slug(name))?.remove();
+  refreshStudentSelect();
+  refreshGridLocationSelects();
+  renderAll();
 }
 function buildFaders() {
   const wrap = document.getElementById('faderList');
@@ -3026,8 +3169,10 @@ window.addEventListener('hashchange', async () => {
     // boot()) is exactly when pending intake submissions first become
     // visible/fetchable — pick them up now rather than waiting for a reload.
     await processIntakeSubmissions();
+    await refreshConfirmStatus();
     buildRoster();
     renderIntakePanel();
+    renderConfirmStatusPanel();
   }
 });
 
