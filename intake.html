@@ -1,0 +1,367 @@
+<title>Student Intake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #EEF1F3;
+    --surface: #FFFFFF;
+    --surface-2: #F7F8FA;
+    --ink: #171B21;
+    --muted: #5E6875;
+    --line: #DCE1E6;
+    --accent: #0C7C8C;
+    --accent-ink: #FFFFFF;
+    --alarm: #C6303B;
+    --alarm-soft: #F7DBDD;
+    --alarm-ink: #7A121B;
+    --shadow: 0 1px 2px rgba(20, 30, 40, 0.06), 0 8px 24px -12px rgba(20, 30, 40, 0.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151B; --surface: #171E26; --surface-2: #1C2430; --ink: #E7ECF1;
+      --muted: #92A0AC; --line: #2A3340; --accent: #2FB8C4; --accent-ink: #06232A;
+      --alarm: #E8636A; --alarm-soft: #3B1E22; --alarm-ink: #FFC9CC;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151B; --surface: #171E26; --surface-2: #1C2430; --ink: #E7ECF1;
+    --muted: #92A0AC; --line: #2A3340; --accent: #2FB8C4; --accent-ink: #06232A;
+    --alarm: #E8636A; --alarm-soft: #3B1E22; --alarm-ink: #FFC9CC;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  h1, h2, h3 {
+    font-family: 'Barlow Condensed', system-ui, sans-serif; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em; margin: 0;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 60px; display: flex; flex-direction: column; gap: 14px; }
+  .top { text-align: center; margin-bottom: 4px; }
+  .top h1 { font-size: 24px; color: var(--ink); }
+  .top p { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .panel h2 { font-size: 14px; color: var(--ink); margin-bottom: 10px; }
+  .panel h2 .hint { text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--muted); font-weight: 400; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .field[hidden] { display: none; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .field select, .field input[type="text"] {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 8px 9px; font-size: 13.5px; width: 100%;
+  }
+  .checkbox-row {
+    display: flex; align-items: flex-start; gap: 7px; font-size: 12.5px; color: var(--muted);
+    cursor: pointer; line-height: 1.35; margin: -2px 0 12px;
+  }
+  .checkbox-row input[type="checkbox"] { margin-top: 2px; flex: 0 0 auto; }
+  .mini-head {
+    font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em;
+    font-size: 11.5px; color: var(--muted); font-weight: 600; margin: 4px 0 7px;
+  }
+  .mini-head .hint { text-transform: none; font-weight: 400; }
+  .block-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
+  .block-row[hidden], ul.block-list[hidden] { display: none; }
+  .block-row select, .block-row input[type="time"], .block-row input[type="text"] {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 6px 7px; font-size: 12px; flex: 1 1 80px; min-width: 0;
+  }
+  .block-row input[type="text"] { flex-basis: 110px; }
+  .block-row button.add-block-btn {
+    flex: 0 0 auto; background: var(--accent); color: var(--accent-ink); border: none;
+    border-radius: 6px; width: 30px; font-size: 16px; font-weight: 700; cursor: pointer; line-height: 1;
+  }
+  .block-row button.add-block-btn:hover { filter: brightness(1.08); }
+  ul.block-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  ul.block-list li {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
+    padding: 5px 8px; font-size: 12px; color: var(--ink);
+  }
+  ul.block-list button.rm-btn {
+    background: none; border: none; color: var(--alarm); font-size: 14px; font-weight: 700;
+    cursor: pointer; padding: 0 2px; line-height: 1;
+  }
+  .primary-btn {
+    width: 100%; margin-top: 4px; background: var(--accent); color: var(--accent-ink);
+    border: none; border-radius: 7px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .primary-btn:hover { filter: brightness(1.06); }
+  .primary-btn:disabled { opacity: 0.6; cursor: default; }
+  #formMsg { min-height: 16px; margin-top: 8px; font-size: 12.5px; }
+  .msg-ok { color: var(--accent); }
+  .msg-err { color: var(--alarm); }
+  .done-panel { text-align: center; padding: 30px 18px; }
+  .done-panel .big-check {
+    width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center; font-size: 26px; margin: 0 auto 12px;
+  }
+  .done-panel h2 { font-size: 17px; margin-bottom: 6px; }
+  .done-panel p { color: var(--muted); font-size: 12.5px; margin: 0; }
+  .loading-note { color: var(--muted); font-size: 12px; }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>Student Info Form</h1>
+    <p>Media Technologies work-study — availability &amp; class schedule</p>
+  </div>
+
+  <form class="panel" id="intakeForm">
+    <h2>Who are you?</h2>
+    <div class="field">
+      <label>Name</label>
+      <select id="nameSelect"><option value="">Loading roster…</option></select>
+    </div>
+    <label class="checkbox-row">
+      <input type="checkbox" id="notListedChk">
+      I'm not on this list (new work-study student)
+    </label>
+    <div class="field" id="newNameWrap" hidden>
+      <label>Your full name</label>
+      <input type="text" id="newNameInput" placeholder="Full name">
+    </div>
+    <div class="field" id="majorWrap" hidden>
+      <label>Major <span class="hint">optional</span></label>
+      <input type="text" id="majorInput" placeholder="e.g. Video Production">
+    </div>
+  </form>
+
+  <section class="panel">
+    <h2>Availability <span class="hint">when you're free to work</span></h2>
+    <label class="checkbox-row">
+      <input type="checkbox" id="availAuto" checked>
+      Auto — I'm available any time I'm not in a class/internship/job block listed below
+    </label>
+    <div class="block-row" id="availManualRow" hidden>
+      <select id="availDay"></select>
+      <input type="time" id="availStart">
+      <input type="time" id="availEnd">
+      <button type="button" class="add-block-btn" id="addAvailBtn">+</button>
+    </div>
+    <ul class="block-list" id="availList" hidden></ul>
+  </section>
+
+  <section class="panel">
+    <h2>Classes / internship / job <span class="hint">times you're NOT available</span></h2>
+    <div class="block-row">
+      <select id="classDay"></select>
+      <input type="text" id="classCourse" placeholder="Course / name">
+      <input type="time" id="classStart">
+      <input type="time" id="classEnd">
+      <select id="classType">
+        <option value="Class">Class</option>
+        <option value="Internship">Internship</option>
+        <option value="Outside Job">Outside Job</option>
+      </select>
+      <button type="button" class="add-block-btn" id="addClassBtn">+</button>
+    </div>
+    <ul class="block-list" id="classList"></ul>
+  </section>
+
+  <div class="panel">
+    <button type="button" class="primary-btn" id="submitBtn">Submit</button>
+    <p id="formMsg"></p>
+    <p class="loading-note">Submitting this replaces your entire availability and class schedule on file with what's listed above — it's a full update, not an addition to what's already there.</p>
+  </div>
+
+  <div class="panel done-panel" id="donePanel" hidden>
+    <div class="big-check">✓</div>
+    <h2>Got it — thanks!</h2>
+    <p id="doneMsg"></p>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Same Supabase project as the console (shift_console_web.html). This page
+// only ever INSERTs into intake_submissions (open to anyone, no sign-in —
+// see intake_setup.sql) and reads the current roster names out of app_state
+// (already publicly readable) to populate the dropdown. It never writes to
+// app_state directly.
+// ---------------------------------------------------------------------------
+const SUPABASE_URL = 'https://vnbmpbsuxvhlbudcfwre.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_-WVQcD1LsxqTae6l7gAtkQ_eJ-oc4Qr';
+const APP_STATE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/app_state';
+const INTAKE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/intake_submissions';
+
+function supabaseHeaders(extra) {
+  return Object.assign({
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+    'Content-Type': 'application/json',
+  }, extra || {});
+}
+
+const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function round4(x) { return Math.round(x * 10000) / 10000; }
+function parseTimeStr(str) {
+  const [h, m] = str.split(':').map(Number);
+  return h + (m || 0) / 60;
+}
+function fmtClock(dec) {
+  let h = Math.floor(dec), m = Math.round((dec - h) * 60);
+  if (m === 60) { h += 1; m = 0; }
+  const period = h >= 12 ? 'pm' : 'am';
+  let h12 = h % 12; if (h12 === 0) h12 = 12;
+  return m === 0 ? `${h12}${period}` : `${h12}:${String(m).padStart(2, '0')}${period}`;
+}
+
+let pendingAvail = [];
+let pendingClasses = [];
+
+function renderPendingAvail() {
+  document.getElementById('availList').innerHTML = pendingAvail.map((b, i) =>
+    `<li><span>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span><button type="button" class="rm-btn" data-i="${i}">×</button></li>`
+  ).join('');
+}
+function renderPendingClasses() {
+  document.getElementById('classList').innerHTML = pendingClasses.map((c, i) =>
+    `<li><span>${esc(c.day)} ${esc(c.course || c.type)} ${fmtClock(c.start)}–${fmtClock(c.end)}</span><button type="button" class="rm-btn" data-i="${i}">×</button></li>`
+  ).join('');
+}
+
+function setMsg(text, kind) {
+  const el = document.getElementById('formMsg');
+  el.textContent = text;
+  el.className = kind === 'ok' ? 'msg-ok' : kind === 'err' ? 'msg-err' : '';
+}
+
+async function loadRosterNames() {
+  const sel = document.getElementById('nameSelect');
+  try {
+    const resp = await fetch(APP_STATE_URL + '?id=eq.1&select=data', {
+      headers: supabaseHeaders({ Accept: 'application/vnd.pgrst.object+json' }),
+      cache: 'no-store',
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const row = await resp.json();
+    const students = (row && row.data && Array.isArray(row.data.students)) ? row.data.students : [];
+    const names = students.map(s => s.name).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    sel.innerHTML = '<option value="">Select your name…</option>' +
+      names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Couldn’t load the roster — check "I’m not on this list" below</option>';
+  }
+}
+
+function wireForm() {
+  const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
+  document.getElementById('availDay').innerHTML = dayOpts;
+  document.getElementById('classDay').innerHTML = dayOpts;
+
+  const notListedChk = document.getElementById('notListedChk');
+  const nameSelect = document.getElementById('nameSelect');
+  const newNameWrap = document.getElementById('newNameWrap');
+  const majorWrap = document.getElementById('majorWrap');
+  notListedChk.addEventListener('change', () => {
+    newNameWrap.hidden = !notListedChk.checked;
+    majorWrap.hidden = !notListedChk.checked;
+    nameSelect.disabled = notListedChk.checked;
+    if (notListedChk.checked) nameSelect.value = '';
+  });
+
+  const availAuto = document.getElementById('availAuto');
+  const availManualRow = document.getElementById('availManualRow');
+  const availList = document.getElementById('availList');
+  const syncAvailAutoUI = () => {
+    availManualRow.hidden = availAuto.checked;
+    availList.hidden = availAuto.checked;
+  };
+  availAuto.addEventListener('change', syncAvailAutoUI);
+  syncAvailAutoUI();
+
+  document.getElementById('addAvailBtn').addEventListener('click', () => {
+    const day = document.getElementById('availDay').value;
+    const startStr = document.getElementById('availStart').value;
+    const endStr = document.getElementById('availEnd').value;
+    if (!startStr || !endStr) { setMsg('Set both a start and end time for the block.', 'err'); return; }
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) { setMsg('End time must be after start time.', 'err'); return; }
+    pendingAvail.push({ day, start, end });
+    renderPendingAvail();
+    setMsg('', null);
+  });
+  document.getElementById('availList').addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    pendingAvail.splice(+e.target.dataset.i, 1);
+    renderPendingAvail();
+  });
+
+  document.getElementById('addClassBtn').addEventListener('click', () => {
+    const day = document.getElementById('classDay').value;
+    const course = document.getElementById('classCourse').value.trim();
+    const startStr = document.getElementById('classStart').value;
+    const endStr = document.getElementById('classEnd').value;
+    const type = document.getElementById('classType').value;
+    if (!startStr || !endStr) { setMsg('Set both a start and end time for the block.', 'err'); return; }
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) { setMsg('End time must be after start time.', 'err'); return; }
+    pendingClasses.push({ day, course: course || type, start, end, type });
+    renderPendingClasses();
+    document.getElementById('classCourse').value = '';
+    setMsg('', null);
+  });
+  document.getElementById('classList').addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    pendingClasses.splice(+e.target.dataset.i, 1);
+    renderPendingClasses();
+  });
+
+  document.getElementById('submitBtn').addEventListener('click', async () => {
+    const isNew = notListedChk.checked;
+    const name = isNew ? document.getElementById('newNameInput').value.trim() : nameSelect.value;
+    if (!name) { setMsg(isNew ? 'Enter your full name.' : 'Select your name from the list.', 'err'); return; }
+    if (!availAuto.checked && !pendingAvail.length) {
+      setMsg('Add at least one availability block, or check "Auto" above.', 'err');
+      return;
+    }
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    setMsg('Submitting…', null);
+    try {
+      const resp = await fetch(INTAKE_URL, {
+        method: 'POST',
+        headers: supabaseHeaders({ Prefer: 'return=minimal' }),
+        body: JSON.stringify({
+          student_name: name,
+          is_new_student: isNew,
+          major: isNew ? (document.getElementById('majorInput').value.trim() || null) : null,
+          auto_availability: availAuto.checked,
+          availability: pendingAvail,
+          classes: pendingClasses,
+        }),
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error('HTTP ' + resp.status + (text ? ': ' + text.slice(0, 200) : ''));
+      }
+      document.getElementById('intakeForm').closest('.wrap').querySelectorAll('.panel').forEach(p => {
+        if (p.id !== 'donePanel') p.hidden = true;
+      });
+      document.getElementById('doneMsg').textContent =
+        `Your info was submitted for ${name}${isNew ? ' (new student)' : ''}. Paul will review it and add it to the schedule.`;
+      document.getElementById('donePanel').hidden = false;
+    } catch (e) {
+      setMsg('Submission failed — check your connection and try again. (' + (e && e.message ? e.message : 'error') + ')', 'err');
+      btn.disabled = false;
+    }
+  });
+}
+
+async function boot() {
+  wireForm();
+  await loadRosterNames();
+}
+boot();
+</script>

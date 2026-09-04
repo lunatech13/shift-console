@@ -408,6 +408,24 @@
   .stat { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
   .stat strong { color: var(--ink); }
 
+  /* --- Pending Intake panel --- */
+  .intake-panel { margin-bottom: 14px; }
+  ul.intake-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .intake-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 10px; font-size: 12.5px; color: var(--ink);
+  }
+  .intake-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+  .intake-actions button {
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font-size: 11.5px;
+    font-weight: 600; cursor: pointer; background: var(--surface);
+  }
+  .intake-apply-btn, .intake-review-btn { color: var(--accent); border-color: var(--accent); }
+  .intake-apply-btn:hover, .intake-review-btn:hover { background: var(--accent); color: var(--accent-ink); }
+  .intake-reject-btn { color: var(--alarm); }
+  .intake-reject-btn:hover { background: var(--alarm); color: var(--alarm-ink); border-color: var(--alarm); }
+
   /* --- Add Student panel --- */
   .add-student .mini-head {
     font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em;
@@ -662,6 +680,12 @@
       </section>
 
       <section id="tab-roster" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-roster" hidden>
+        <section class="panel intake-panel" id="intakePanel" hidden>
+          <h2>Pending Intake <span class="hint">student-submitted updates, awaiting review</span></h2>
+          <p class="hint" id="intakeAutoNote" hidden></p>
+          <ul class="intake-list" id="intakeQueueList"></ul>
+        </section>
+
         <div class="roster-grid" id="rosterList"></div>
 
         <section class="panel add-student">
@@ -821,6 +845,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_-WVQcD1LsxqTae6l7gAtkQ_eJ-oc4Qr'; // t
 const SUPABASE_TABLE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/app_state';
 const SUPABASE_AUTH_URL = SUPABASE_URL.replace(/\/$/, '') + '/auth/v1';
 const APP_ACCESS_TABLE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/app_access';
+const INTAKE_TABLE_URL = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/intake_submissions';
 // The one account always allowed to save. Must match the email in the
 // Supabase RLS policies on app_state (see the SQL comment near saveState
 // below) — changing one without the other either locks you out or silently
@@ -841,11 +866,17 @@ let lastSavedAt = null;
 //     save, no auth at all. Flip off the same way. Grade/wage/payroll
 //     masking also lifts while this is on, since an editor needs to see
 //     what they're editing.
-let ACCESS_CONFIG = { open_write: false, extra_writers: [], public_write: false };
+// intake_auto_apply is a lower-stakes switch than the other three (it only
+// governs whether a *matched-name* student-submitted schedule update still
+// needs a manual Apply click, never whether anything reaches the database
+// without a Save — see the comment above processIntakeSubmissions() below).
+// Still, on a load failure this defaults to false (always review) rather
+// than true, matching the same fail-closed instinct as everything else here.
+let ACCESS_CONFIG = { open_write: false, extra_writers: [], public_write: false, intake_auto_apply: false };
 async function loadAccessConfig() {
   if (!supabaseConfigured) return;
   try {
-    const resp = await fetch(APP_ACCESS_TABLE_URL + '?id=eq.1&select=open_write,extra_writers,public_write', {
+    const resp = await fetch(APP_ACCESS_TABLE_URL + '?id=eq.1&select=open_write,extra_writers,public_write,intake_auto_apply', {
       headers: supabaseHeaders({ Accept: 'application/vnd.pgrst.object+json' }),
       cache: 'no-store',
     });
@@ -855,6 +886,7 @@ async function loadAccessConfig() {
       open_write: !!(row && row.open_write),
       extra_writers: (row && Array.isArray(row.extra_writers)) ? row.extra_writers : [],
       public_write: !!(row && row.public_write),
+      intake_auto_apply: !!(row && row.intake_auto_apply),
     };
   } catch (e) { /* stay closed */ }
 }
@@ -1173,12 +1205,180 @@ async function saveState() {
     }
     lastSavedAt = snapshot.savedAt;
     status.textContent = `Saved ${new Date(lastSavedAt).toLocaleString()}`;
+    if (stagedIntakeIds.length) {
+      await markIntakeApplied(stagedIntakeIds);
+      stagedIntakeIds = [];
+      renderIntakePanel();
+    }
   } catch (e) {
     status.textContent = 'Save failed — check your connection and try again. (' + (e && e.message ? e.message : 'error') + ')';
   } finally {
     btn.disabled = false;
   }
 }
+// ---------------------------------------------------------------------------
+// Student self-service intake (intake.html) review + auto-apply.
+//
+// Students submit into intake_submissions (a separate table — see
+// intake_setup.sql) with no sign-in of their own. Nothing from there ever
+// reaches the live schedule without going through the SAME Save button and
+// SAME admin-only database write policy every other change in this app
+// already goes through — "auto-apply" below only means a matched-name
+// submission gets folded into the in-browser working copy automatically
+// (no manual Apply click needed) so it's ready for the next Save, exactly
+// like editing a grade slider is ready for the next Save. It never writes
+// to Supabase by itself. A brand-new-student submission is never
+// auto-applied regardless of the switch — it always waits for a manual
+// Review, since only a person should decide a new student's wage, location,
+// and SEP-or-FWS status.
+// ---------------------------------------------------------------------------
+let stagedIntakeIds = [];   // ids merged into the working copy, waiting on the next Save
+let pendingIntakeQueue = []; // submissions still needing a manual Apply/Review/Reject
+
+function matchIntakeStudent(name) {
+  const n = (name || '').trim().toLowerCase();
+  if (!n) return null;
+  return NAMES.find(x => x.toLowerCase() === n) || null;
+}
+async function fetchPendingIntake() {
+  if (!supabaseConfigured || !isAdminSignedIn()) return [];
+  try {
+    const resp = await fetch(INTAKE_TABLE_URL + '?status=eq.pending&select=*&order=created_at.asc', {
+      headers: supabaseHeaders({ Authorization: 'Bearer ' + authSession.access_token }),
+      cache: 'no-store',
+    });
+    if (!resp.ok) return []; // table not set up yet, or not signed in as the admin — treat as none pending
+    const rows = await resp.json();
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) { return []; }
+}
+function applyIntakeToStudent(sub, matchedName) {
+  const s = STUDENTS.find(x => x.name === matchedName);
+  if (!s) return false;
+  // A submission is a full restatement of the student's schedule, not an
+  // incremental add — replace wholesale so nothing stale lingers alongside it.
+  s.autoAvailability = !!sub.auto_availability;
+  s.availability = Array.isArray(sub.availability) ? sub.availability.map(b => ({ ...b })) : [];
+  s.classes = Array.isArray(sub.classes) ? sub.classes.map(c => ({ ...c })) : [];
+  return true;
+}
+async function markIntakeApplied(ids) {
+  if (!ids.length || !authSession) return;
+  try {
+    await fetch(INTAKE_TABLE_URL + '?id=in.(' + ids.join(',') + ')', {
+      method: 'PATCH',
+      headers: supabaseHeaders({ Authorization: 'Bearer ' + authSession.access_token, Prefer: 'return=minimal' }),
+      body: JSON.stringify({ status: 'applied', applied_at: new Date().toISOString() }),
+    });
+  } catch (e) {
+    // Best effort — worst case this submission still shows as pending next
+    // load and gets merged again, which is harmless (it's the same wholesale
+    // replace either way, not a duplicate addition).
+  }
+}
+async function rejectIntakeSubmission(id) {
+  if (!supabaseConfigured || !authSession) return;
+  try {
+    await fetch(INTAKE_TABLE_URL + '?id=eq.' + id, {
+      method: 'PATCH',
+      headers: supabaseHeaders({ Authorization: 'Bearer ' + authSession.access_token, Prefer: 'return=minimal' }),
+      body: JSON.stringify({ status: 'rejected' }),
+    });
+  } catch (e) { /* best effort — it'll just show up again next load if this fails */ }
+}
+async function processIntakeSubmissions() {
+  stagedIntakeIds = [];
+  pendingIntakeQueue = [];
+  if (!isAdminSignedIn()) return;
+  const rows = await fetchPendingIntake();
+  for (const sub of rows) {
+    const matchedName = sub.is_new_student ? null : matchIntakeStudent(sub.student_name);
+    if (matchedName && ACCESS_CONFIG.intake_auto_apply) {
+      applyIntakeToStudent(sub, matchedName);
+      stagedIntakeIds.push(sub.id);
+    } else {
+      pendingIntakeQueue.push(Object.assign({}, sub, { matchedName }));
+    }
+  }
+}
+function intakeItemLabel(item) {
+  return item.matchedName
+    ? `${esc(item.student_name)} — schedule update`
+    : `${esc(item.student_name)} — new student`;
+}
+function renderIntakePanel() {
+  const panel = document.getElementById('intakePanel');
+  const list = document.getElementById('intakeQueueList');
+  const autoNote = document.getElementById('intakeAutoNote');
+  if (!panel || !list || !autoNote) return;
+  const hasQueue = pendingIntakeQueue.length > 0;
+  const hasStaged = stagedIntakeIds.length > 0;
+  panel.hidden = !hasQueue && !hasStaged;
+  if (panel.hidden) return;
+  autoNote.hidden = !hasStaged;
+  if (hasStaged) {
+    const n = stagedIntakeIds.length;
+    autoNote.textContent = `${n} matched submission${n === 1 ? '' : 's'} auto-applied to the working schedule — click Save above to commit ${n === 1 ? 'it' : 'them'} to the database.`;
+  }
+  list.innerHTML = pendingIntakeQueue.map(item => `
+    <li class="intake-item" data-id="${item.id}">
+      <span>${intakeItemLabel(item)}</span>
+      <span class="intake-actions">
+        ${item.matchedName
+          ? `<button type="button" class="intake-apply-btn" data-id="${item.id}">Apply</button>`
+          : `<button type="button" class="intake-review-btn" data-id="${item.id}">Review</button>`}
+        <button type="button" class="intake-reject-btn" data-id="${item.id}">Reject</button>
+      </span>
+    </li>`).join('');
+}
+function beginIntakeReview(item) {
+  reviewingIntakeId = item.id;
+  document.getElementById('newName').value = item.student_name || '';
+  document.getElementById('newMajor').value = item.major || '';
+  const newAvailAuto = document.getElementById('newAvailAuto');
+  newAvailAuto.checked = !!item.auto_availability;
+  newAvailAuto.dispatchEvent(new Event('change'));
+  pendingAvail = Array.isArray(item.availability) ? item.availability.map(b => ({ ...b })) : [];
+  pendingClasses = Array.isArray(item.classes) ? item.classes.map(c => ({ ...c })) : [];
+  renderPendingAvail();
+  renderPendingClasses();
+  pendingIntakeQueue = pendingIntakeQueue.filter(x => x.id !== item.id);
+  renderIntakePanel();
+  const addStudentPanel = document.querySelector('.add-student');
+  if (addStudentPanel) addStudentPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const msg = document.getElementById('addStudentMsg');
+  if (msg) {
+    msg.textContent = `Reviewing ${item.student_name}'s submission — set their location, wage, and program below, then Add Student.`;
+    msg.style.color = 'var(--accent)';
+  }
+}
+function wireIntakePanel() {
+  const list = document.getElementById('intakeQueueList');
+  if (!list) return;
+  list.addEventListener('click', async e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const id = +btn.dataset.id;
+    const item = pendingIntakeQueue.find(x => x.id === id);
+    if (!item) return;
+    if (btn.classList.contains('intake-apply-btn')) {
+      applyIntakeToStudent(item, item.matchedName);
+      stagedIntakeIds.push(id);
+      pendingIntakeQueue = pendingIntakeQueue.filter(x => x.id !== id);
+      buildRoster();
+      renderIntakePanel();
+      renderAll();
+    } else if (btn.classList.contains('intake-review-btn')) {
+      beginIntakeReview(item);
+    } else if (btn.classList.contains('intake-reject-btn')) {
+      btn.disabled = true;
+      await rejectIntakeSubmission(id);
+      pendingIntakeQueue = pendingIntakeQueue.filter(x => x.id !== id);
+      renderIntakePanel();
+    }
+  });
+}
+
 async function boot() {
   if (!consumeAuthRedirect()) loadStoredAuthSession();
   await Promise.all([ensureFreshSession(), loadAccessConfig()]);
@@ -1192,12 +1392,16 @@ async function boot() {
     for (const n of NAMES) WAGES[n] = DEFAULT_WAGE;
   }
 
+  await processIntakeSubmissions();
+
   buildHourSelects();
   if (loaded) applySettingsToInputs(loaded.settings);
   buildFaders();
   buildRoster();
   wireControls();
   wireAuthControls();
+  wireIntakePanel();
+  renderIntakePanel();
   updateAuthUI();
   updateSaveUI();
   renderAll();
@@ -2667,6 +2871,7 @@ function refreshGridLocationSelects() {
 // ---------------------------------------------------------------------------
 let pendingAvail = [];
 let pendingClasses = [];
+let reviewingIntakeId = null; // set while the Add Student form is pre-filled from a "Review" click
 
 function parseTimeStr(str) {
   const [h, m] = str.split(':').map(Number);
@@ -2779,6 +2984,11 @@ function wireAddStudentPanel() {
     appendFader(name, 5, DEFAULT_WAGE);
     refreshStudentSelect();
     refreshGridLocationSelects();
+    if (reviewingIntakeId != null) {
+      stagedIntakeIds.push(reviewingIntakeId);
+      reviewingIntakeId = null;
+      renderIntakePanel();
+    }
     saveCustomStudents();
 
     pendingAvail = []; pendingClasses = [];
@@ -2812,6 +3022,12 @@ window.addEventListener('hashchange', async () => {
     await Promise.all([ensureFreshSession(), loadAccessConfig()]);
     updateAuthUI();
     updateSaveUI();
+    // Signing in mid-session (rather than arriving already signed in via
+    // boot()) is exactly when pending intake submissions first become
+    // visible/fetchable — pick them up now rather than waiting for a reload.
+    await processIntakeSubmissions();
+    buildRoster();
+    renderIntakePanel();
   }
 });
 
