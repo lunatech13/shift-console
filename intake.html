@@ -80,11 +80,23 @@
     border-radius: 6px; width: 30px; font-size: 16px; font-weight: 700; cursor: pointer; line-height: 1;
   }
   .block-row button.add-block-btn:hover { filter: brightness(1.08); }
+  .block-row button.cancel-edit-btn {
+    flex: 0 0 auto; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 6px; padding: 0 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .block-row button.cancel-edit-btn:hover { color: var(--ink); }
+  .block-row button.cancel-edit-btn[hidden] { display: none; }
   ul.block-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   ul.block-list li {
     display: flex; justify-content: space-between; align-items: center; gap: 6px;
     background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
     padding: 5px 8px; font-size: 12px; color: var(--ink);
+  }
+  ul.block-list li.is-editing { border-color: var(--accent); background: var(--surface); }
+  ul.block-list .li-actions { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+  ul.block-list button.edit-btn {
+    background: none; border: none; color: var(--accent); font-size: 12px; font-weight: 600;
+    cursor: pointer; padding: 0 3px; line-height: 1;
   }
   ul.block-list button.rm-btn {
     background: none; border: none; color: var(--alarm); font-size: 14px; font-weight: 700;
@@ -159,6 +171,7 @@
       <input type="time" id="availStart">
       <input type="time" id="availEnd">
       <button type="button" class="add-block-btn" id="addAvailBtn">+</button>
+      <button type="button" class="cancel-edit-btn" id="cancelAvailEditBtn" hidden>Cancel</button>
     </div>
     <ul class="block-list" id="availList" hidden></ul>
   </section>
@@ -176,6 +189,7 @@
         <option value="Outside Job">Outside Job</option>
       </select>
       <button type="button" class="add-block-btn" id="addClassBtn">+</button>
+      <button type="button" class="cancel-edit-btn" id="cancelClassEditBtn" hidden>Cancel</button>
     </div>
     <ul class="block-list" id="classList"></ul>
   </section>
@@ -232,19 +246,40 @@ function fmtClock(dec) {
   let h12 = h % 12; if (h12 === 0) h12 = 12;
   return m === 0 ? `${h12}${period}` : `${h12}:${String(m).padStart(2, '0')}${period}`;
 }
+// Inverse of parseTimeStr — decimal hours back to an <input type="time"> value,
+// used to load an existing block's times back into the editor row for editing.
+function fmtTimeInput(dec) {
+  let h = Math.floor(dec), m = Math.round((dec - h) * 60);
+  if (m === 60) { h += 1; m = 0; }
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
 
 let pendingAvail = [];
 let pendingClasses = [];
+// Index into pendingAvail/pendingClasses currently loaded into the editor row
+// for editing, or null when the row is in "add a new block" mode.
+let editingAvailIndex = null;
+let editingClassIndex = null;
 
 function renderPendingAvail() {
-  document.getElementById('availList').innerHTML = pendingAvail.map((b, i) =>
-    `<li><span>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span><button type="button" class="rm-btn" data-i="${i}">×</button></li>`
-  ).join('');
+  document.getElementById('availList').innerHTML = pendingAvail.map((b, i) => `
+    <li class="${i === editingAvailIndex ? 'is-editing' : ''}">
+      <span>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span>
+      <span class="li-actions">
+        <button type="button" class="edit-btn" data-i="${i}">Edit</button>
+        <button type="button" class="rm-btn" data-i="${i}">×</button>
+      </span>
+    </li>`).join('');
 }
 function renderPendingClasses() {
-  document.getElementById('classList').innerHTML = pendingClasses.map((c, i) =>
-    `<li><span>${esc(c.day)} ${esc(c.course || c.type)} ${fmtClock(c.start)}–${fmtClock(c.end)}</span><button type="button" class="rm-btn" data-i="${i}">×</button></li>`
-  ).join('');
+  document.getElementById('classList').innerHTML = pendingClasses.map((c, i) => `
+    <li class="${i === editingClassIndex ? 'is-editing' : ''}">
+      <span>${esc(c.day)} ${esc(c.course || c.type)} ${fmtClock(c.start)}–${fmtClock(c.end)}</span>
+      <span class="li-actions">
+        <button type="button" class="edit-btn" data-i="${i}">Edit</button>
+        <button type="button" class="rm-btn" data-i="${i}">×</button>
+      </span>
+    </li>`).join('');
 }
 
 function setMsg(text, kind) {
@@ -311,9 +346,30 @@ function wireForm() {
   availAuto.addEventListener('change', syncAvailAutoUI);
   syncAvailAutoUI();
 
+  // Exiting edit mode: switch the add-block button back to "+", hide the
+  // Cancel button, and clear whatever was loaded into the editor row so a
+  // stray click on "+" right after doesn't silently re-add it as a new block.
+  function exitAvailEditMode() {
+    editingAvailIndex = null;
+    document.getElementById('addAvailBtn').textContent = '+';
+    document.getElementById('cancelAvailEditBtn').hidden = true;
+    document.getElementById('availStart').value = '';
+    document.getElementById('availEnd').value = '';
+  }
+  function exitClassEditMode() {
+    editingClassIndex = null;
+    document.getElementById('addClassBtn').textContent = '+';
+    document.getElementById('cancelClassEditBtn').hidden = true;
+    document.getElementById('classCourse').value = '';
+    document.getElementById('classStart').value = '';
+    document.getElementById('classEnd').value = '';
+  }
+
   const clearScheduleFields = () => {
     pendingAvail = [];
     pendingClasses = [];
+    exitAvailEditMode();
+    exitClassEditMode();
     renderPendingAvail();
     renderPendingClasses();
     loadedNote.hidden = true;
@@ -344,6 +400,8 @@ function wireForm() {
     if (!student) { clearScheduleFields(); return; }
     availAuto.checked = !!student.autoAvailability;
     syncAvailAutoUI();
+    exitAvailEditMode();
+    exitClassEditMode();
     pendingAvail = Array.isArray(student.availability) ? student.availability.map(b => ({ ...b })) : [];
     pendingClasses = Array.isArray(student.classes) ? student.classes.map(c => ({ ...c })) : [];
     renderPendingAvail();
@@ -362,14 +420,40 @@ function wireForm() {
     if (!startStr || !endStr) { setMsg('Set both a start and end time for the block.', 'err'); return; }
     const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
     if (end <= start) { setMsg('End time must be after start time.', 'err'); return; }
-    pendingAvail.push({ day, start, end });
+    if (editingAvailIndex != null) {
+      pendingAvail[editingAvailIndex] = { day, start, end };
+      exitAvailEditMode();
+    } else {
+      pendingAvail.push({ day, start, end });
+    }
     renderPendingAvail();
     setMsg('', null);
   });
-  document.getElementById('availList').addEventListener('click', e => {
-    if (!e.target.classList.contains('rm-btn')) return;
-    pendingAvail.splice(+e.target.dataset.i, 1);
+  document.getElementById('cancelAvailEditBtn').addEventListener('click', () => {
+    exitAvailEditMode();
     renderPendingAvail();
+  });
+  document.getElementById('availList').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const i = +btn.dataset.i;
+    if (btn.classList.contains('rm-btn')) {
+      pendingAvail.splice(i, 1);
+      if (editingAvailIndex === i) exitAvailEditMode();
+      else if (editingAvailIndex != null && i < editingAvailIndex) editingAvailIndex--;
+      renderPendingAvail();
+    } else if (btn.classList.contains('edit-btn')) {
+      const b = pendingAvail[i];
+      if (!b) return;
+      editingAvailIndex = i;
+      document.getElementById('availDay').value = b.day;
+      document.getElementById('availStart').value = fmtTimeInput(b.start);
+      document.getElementById('availEnd').value = fmtTimeInput(b.end);
+      document.getElementById('addAvailBtn').textContent = '✓';
+      document.getElementById('cancelAvailEditBtn').hidden = false;
+      renderPendingAvail();
+      setMsg('', null);
+    }
   });
 
   document.getElementById('addClassBtn').addEventListener('click', () => {
@@ -381,15 +465,44 @@ function wireForm() {
     if (!startStr || !endStr) { setMsg('Set both a start and end time for the block.', 'err'); return; }
     const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
     if (end <= start) { setMsg('End time must be after start time.', 'err'); return; }
-    pendingClasses.push({ day, course: course || type, start, end, type });
+    const block = { day, course: course || type, start, end, type };
+    if (editingClassIndex != null) {
+      pendingClasses[editingClassIndex] = block;
+      exitClassEditMode();
+    } else {
+      pendingClasses.push(block);
+      document.getElementById('classCourse').value = '';
+    }
     renderPendingClasses();
-    document.getElementById('classCourse').value = '';
     setMsg('', null);
   });
-  document.getElementById('classList').addEventListener('click', e => {
-    if (!e.target.classList.contains('rm-btn')) return;
-    pendingClasses.splice(+e.target.dataset.i, 1);
+  document.getElementById('cancelClassEditBtn').addEventListener('click', () => {
+    exitClassEditMode();
     renderPendingClasses();
+  });
+  document.getElementById('classList').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const i = +btn.dataset.i;
+    if (btn.classList.contains('rm-btn')) {
+      pendingClasses.splice(i, 1);
+      if (editingClassIndex === i) exitClassEditMode();
+      else if (editingClassIndex != null && i < editingClassIndex) editingClassIndex--;
+      renderPendingClasses();
+    } else if (btn.classList.contains('edit-btn')) {
+      const c = pendingClasses[i];
+      if (!c) return;
+      editingClassIndex = i;
+      document.getElementById('classDay').value = c.day;
+      document.getElementById('classCourse').value = c.course || '';
+      document.getElementById('classStart').value = fmtTimeInput(c.start);
+      document.getElementById('classEnd').value = fmtTimeInput(c.end);
+      document.getElementById('classType').value = c.type || 'Class';
+      document.getElementById('addClassBtn').textContent = '✓';
+      document.getElementById('cancelClassEditBtn').hidden = false;
+      renderPendingClasses();
+      setMsg('', null);
+    }
   });
 
   // Shared by both buttons — Submit and Confirm send the same payload
