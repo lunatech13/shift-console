@@ -131,6 +131,8 @@
   .loading-note { color: var(--muted); font-size: 12px; }
   .loaded-note { margin: 6px 0 0; font-size: 11.5px; color: var(--accent); font-weight: 500; }
   .loaded-note[hidden] { display: none; }
+  .finalize-panel p { font-size: 13px; margin: 0 0 12px; }
+  #finalizeMsg { min-height: 16px; margin-top: 8px; font-size: 12.5px; }
 </style>
 
 <div class="wrap">
@@ -200,7 +202,14 @@
       <button type="button" class="secondary-btn" id="confirmBtn" hidden>Confirm — looks good, no changes</button>
     </div>
     <p id="formMsg"></p>
-    <p class="loading-note">Submitting this replaces your entire availability and class schedule on file with what's listed above — it's a full update, not an addition to what's already there.</p>
+    <p class="loading-note">Submitting this replaces your entire availability and class schedule on file with what's listed above — it's a full update, not an addition to what's already there. Either way, there's one quick confirm step right after this to finalize it.</p>
+  </div>
+
+  <div class="panel finalize-panel" id="finalizePanel" hidden>
+    <h2>One last step</h2>
+    <p>Your update was submitted. Since you just told us this is your current, accurate schedule, tap below to confirm it and finish — that's what lets Paul know you've reviewed everything.</p>
+    <button type="button" class="primary-btn" id="finalizeConfirmBtn">Confirm — this is accurate</button>
+    <p id="finalizeMsg"></p>
   </div>
 
   <div class="panel done-panel" id="donePanel" hidden>
@@ -407,7 +416,7 @@ function wireForm() {
     renderPendingAvail();
     renderPendingClasses();
     loadedNote.hidden = false;
-    loadedNote.textContent = `Loaded ${name}'s current info on file — review below. If it's still accurate, tap Confirm. If something changed, update it and tap Submit updates.`;
+    loadedNote.textContent = `Loaded ${name}'s current info on file — review below. If it's still accurate, tap Confirm. If something changed, update it and tap Submit updates — you'll get one more quick tap to confirm right after.`;
     setMsg('', null);
     syncConfirmBtnUI();
   });
@@ -505,21 +514,42 @@ function wireForm() {
     }
   });
 
-  // Shared by both buttons — Submit and Confirm send the same payload
-  // (whatever's currently in the editors), differing only in confirmed_only:
-  // true means "I looked at this and it's still accurate, no edits needed,"
-  // which is what lets the console show a per-student confirmed checklist.
-  async function submitIntake(confirmedOnly) {
+  const finalizeConfirmBtn = document.getElementById('finalizeConfirmBtn');
+
+  function setFinalizeMsg(text, kind) {
+    const el = document.getElementById('finalizeMsg');
+    el.textContent = text;
+    el.className = kind === 'ok' ? 'msg-ok' : kind === 'err' ? 'msg-err' : '';
+  }
+  function showOnlyPanel(idToShow) {
+    document.getElementById('intakeForm').closest('.wrap').querySelectorAll('.panel').forEach(p => {
+      p.hidden = (p.id !== idToShow);
+    });
+  }
+
+  // Shared by all three buttons — Submit, Confirm, and the finalize-step
+  // Confirm — send the same payload (whatever's currently in the editors),
+  // differing only in confirmed_only: true means "I looked at this and it's
+  // accurate," which is what lets the console show a per-student confirmed
+  // checklist. An existing student who submits an UPDATE (confirmedOnly
+  // false) isn't done yet — one more tap on the finalize step sends the
+  // same info again with confirmed_only:true, so "I changed something" and
+  // "I confirmed it's now right" are always two distinct, explicit signals
+  // rather than assuming an update alone means it's been reviewed.
+  async function submitIntake(confirmedOnly, opts) {
+    opts = opts || {};
+    const msgSetter = opts.msgElId === 'finalizeMsg' ? setFinalizeMsg : setMsg;
     const isNew = notListedChk.checked;
     const name = isNew ? document.getElementById('newNameInput').value.trim() : nameSelect.value;
-    if (!name) { setMsg(isNew ? 'Enter your full name.' : 'Select your name from the list.', 'err'); return; }
+    if (!name) { msgSetter(isNew ? 'Enter your full name.' : 'Select your name from the list.', 'err'); return; }
     if (!availAuto.checked && !pendingAvail.length) {
-      setMsg('Add at least one availability block, or check "Auto" above.', 'err');
+      msgSetter('Add at least one availability block, or check "Auto" above.', 'err');
       return;
     }
     submitBtn.disabled = true;
     confirmBtn.disabled = true;
-    setMsg(confirmedOnly ? 'Confirming…' : 'Submitting…', null);
+    finalizeConfirmBtn.disabled = true;
+    msgSetter(confirmedOnly ? 'Confirming…' : 'Submitting…', null);
     try {
       const resp = await fetch(INTAKE_URL, {
         method: 'POST',
@@ -538,22 +568,34 @@ function wireForm() {
         const text = await resp.text().catch(() => '');
         throw new Error('HTTP ' + resp.status + (text ? ': ' + text.slice(0, 200) : ''));
       }
-      document.getElementById('intakeForm').closest('.wrap').querySelectorAll('.panel').forEach(p => {
-        if (p.id !== 'donePanel') p.hidden = true;
-      });
-      document.getElementById('doneMsg').textContent = confirmedOnly
-        ? `Thanks — you confirmed ${name}'s info is still accurate. Paul can see that on his end.`
-        : `Your info was submitted for ${name}${isNew ? ' (new student)' : ''}. Paul will review it and add it to the schedule.`;
-      document.getElementById('donePanel').hidden = false;
+      if (confirmedOnly) {
+        showOnlyPanel('donePanel');
+        document.getElementById('doneMsg').textContent = opts.afterUpdate
+          ? `Thanks — your update is submitted and confirmed for ${name}. Paul can see that on his end.`
+          : `Thanks — you confirmed ${name}'s info is still accurate. Paul can see that on his end.`;
+      } else if (!isNew) {
+        // Existing student, made changes — one more explicit tap needed
+        // before this counts as reviewed. Re-enable the finalize button,
+        // since it was disabled above along with the other two and needs
+        // to be clickable on the panel we're switching to.
+        finalizeConfirmBtn.disabled = false;
+        showOnlyPanel('finalizePanel');
+      } else {
+        showOnlyPanel('donePanel');
+        document.getElementById('doneMsg').textContent =
+          `Your info was submitted for ${name} (new student). Paul will review it and add it to the schedule.`;
+      }
     } catch (e) {
-      setMsg('Submission failed — check your connection and try again. (' + (e && e.message ? e.message : 'error') + ')', 'err');
+      msgSetter('Submission failed — check your connection and try again. (' + (e && e.message ? e.message : 'error') + ')', 'err');
       submitBtn.disabled = false;
       confirmBtn.disabled = false;
+      finalizeConfirmBtn.disabled = false;
     }
   }
 
   submitBtn.addEventListener('click', () => submitIntake(false));
   confirmBtn.addEventListener('click', () => submitIntake(true));
+  finalizeConfirmBtn.addEventListener('click', () => submitIntake(true, { msgElId: 'finalizeMsg', afterUpdate: true }));
 }
 
 async function boot() {

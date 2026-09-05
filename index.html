@@ -455,6 +455,7 @@
   }
   .confirm-status-badge { font-size: 11.5px; font-weight: 600; color: var(--muted); }
   .confirm-status-item.is-confirmed .confirm-status-badge { color: var(--accent); }
+  .confirm-status-item.is-updated .confirm-status-badge { color: var(--amber); }
 
   /* --- Add Student panel --- */
   .add-student .mini-head {
@@ -1354,11 +1355,17 @@ async function processIntakeSubmissions() {
 // to show, per current roster name, whether and when they last confirmed.
 // Read-only — never merges or writes to app_state.
 // ---------------------------------------------------------------------------
-let confirmStatusMap = {}; // roster name -> ISO timestamp of their latest confirmation, or absent if never
+// roster name -> { status: 'confirmed' | 'updated', at: ISO timestamp } — a
+// name with no entry here has never submitted anything at all. 'updated'
+// means they've submitted (at least once) but every submission on file for
+// them had confirmed_only:false — i.e. intake.html's finalize step was never
+// completed, so it doesn't count as reviewed yet (see the comment above
+// submitIntake() in intake.html for why Submit alone isn't treated as done).
+let confirmStatusMap = {};
 async function fetchIntakeHistory() {
   if (!supabaseConfigured || !isAdminSignedIn()) return [];
   try {
-    const resp = await fetch(INTAKE_TABLE_URL + '?confirmed_only=eq.true&select=student_name,created_at&order=created_at.desc', {
+    const resp = await fetch(INTAKE_TABLE_URL + '?select=student_name,created_at,confirmed_only&order=created_at.desc', {
       headers: supabaseHeaders({ Authorization: 'Bearer ' + authSession.access_token }),
       cache: 'no-store',
     });
@@ -1370,11 +1377,19 @@ async function fetchIntakeHistory() {
 async function refreshConfirmStatus() {
   confirmStatusMap = {};
   if (!isAdminSignedIn()) return;
-  const rows = await fetchIntakeHistory();
-  // Newest first, so the first match per name is their most recent confirmation.
+  const rows = await fetchIntakeHistory(); // newest first
+  const latestAny = {};       // name -> timestamp of their most recent submission, any kind
+  const latestConfirmed = {}; // name -> timestamp of their most recent confirmed_only submission
   for (const row of rows) {
     const matched = matchIntakeStudent(row.student_name);
-    if (matched && !confirmStatusMap[matched]) confirmStatusMap[matched] = row.created_at;
+    if (!matched) continue;
+    if (!latestAny[matched]) latestAny[matched] = row.created_at; // newest-first, so first hit = latest
+    if (row.confirmed_only && !latestConfirmed[matched]) latestConfirmed[matched] = row.created_at;
+  }
+  for (const name of Object.keys(latestAny)) {
+    confirmStatusMap[name] = latestConfirmed[name]
+      ? { status: 'confirmed', at: latestConfirmed[name] }
+      : { status: 'updated', at: latestAny[name] };
   }
 }
 function renderConfirmStatusPanel() {
@@ -1384,11 +1399,17 @@ function renderConfirmStatusPanel() {
   if (!isAdminSignedIn() || !NAMES.length) { panel.hidden = true; return; }
   panel.hidden = false;
   list.innerHTML = NAMES.map(n => {
-    const ts = confirmStatusMap[n];
-    const when = ts ? new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
-    return `<li class="confirm-status-item ${ts ? 'is-confirmed' : 'is-pending'}">
+    const entry = confirmStatusMap[n];
+    const when = entry ? new Date(entry.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
+    const cls = entry ? (entry.status === 'confirmed' ? 'is-confirmed' : 'is-updated') : 'is-pending';
+    const label = !entry
+      ? 'No response yet'
+      : entry.status === 'confirmed'
+        ? `✓ Confirmed ${when}`
+        : `Updated ${when} — not yet confirmed`;
+    return `<li class="confirm-status-item ${cls}">
       <span>${esc(n)}</span>
-      <span class="confirm-status-badge">${ts ? `✓ Confirmed ${when}` : 'Not yet confirmed'}</span>
+      <span class="confirm-status-badge">${label}</span>
     </li>`;
   }).join('');
 }
