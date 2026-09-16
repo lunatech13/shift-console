@@ -465,11 +465,12 @@
   .add-student .mini-head .hint { text-transform: none; font-weight: 400; }
   .block-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
   .block-row[hidden], ul.block-list[hidden] { display: none; }
-  .block-row select, .block-row input[type="time"], .block-row input[type="text"] {
+  .block-row select, .block-row input[type="time"], .block-row input[type="text"], .block-row input[type="number"] {
     background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
     color: var(--ink); padding: 5px 6px; font-size: 11.5px; flex: 1 1 70px; min-width: 0;
   }
   .block-row input[type="text"] { flex-basis: 100px; }
+  .block-row input[type="number"] { flex-basis: 60px; }
   .block-row button.add-block-btn {
     flex: 0 0 auto; background: var(--accent); color: var(--accent-ink); border: none;
     border-radius: 6px; width: 26px; font-size: 15px; font-weight: 700; cursor: pointer; line-height: 1;
@@ -485,6 +486,7 @@
     background: none; border: none; color: var(--alarm); font-size: 13px; font-weight: 700;
     cursor: pointer; padding: 0 2px; line-height: 1;
   }
+  ul.block-list .hw-wage { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
   .primary-btn {
     width: 100%; margin-top: 6px; background: var(--accent); color: var(--accent-ink);
     border: none; border-radius: 7px; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer;
@@ -607,6 +609,21 @@
         <div class="readout"><span>Semester total (With-Fri)</span><span id="semesterTotalOut" class="mono">—</span></div>
         <div class="readout admin-only"><span>Weekly payroll $ (SEP, With-Fri)</span><span id="weeklyPayrollOut" class="mono">—</span></div>
         <div class="readout admin-only"><span>Semester payroll $ (SEP, With-Fri)</span><span id="semesterPayrollOut" class="mono">—</span></div>
+      </section>
+
+      <section class="panel" id="hoursWorkedPanel">
+        <h2>Hours Worked <span class="hint">actual hours logged per pay period, SEP only</span></h2>
+        <div class="block-row">
+          <select id="hwStudentSelect"></select>
+          <input type="text" id="hwPeriodInput" placeholder="Pay period (e.g. Aug 16–31)">
+          <input type="number" id="hwHoursInput" placeholder="Hours" min="0" step="0.25">
+          <button type="button" class="add-block-btn" id="hwAddBtn">+</button>
+        </div>
+        <ul class="block-list" id="hwList"></ul>
+        <div class="readout"><span>Total hours worked (SEP)</span><span id="hwTotalOut" class="mono">—</span></div>
+        <div class="readout"><span>Fall hours remaining</span><span id="hwRemainingOut" class="mono">—</span></div>
+        <p class="hint budget-derivation" id="hwRemainingHint"></p>
+        <div class="readout admin-only"><span>Payroll $ paid so far (SEP)</span><span id="hwPayrollOut" class="mono">—</span></div>
       </section>
 
       <section class="panel">
@@ -829,6 +846,17 @@ const DEFAULT_WAGE = 10.00;
 // Populated at boot from whichever source wins (saved state, else legacy
 // localStorage, else this flat default) — read by faderMarkup/buildFaders.
 const WAGES = {};
+
+// ---------------------------------------------------------------------------
+// Hours Worked log — actual hours a student has clocked in a completed pay
+// period, entered by hand once payroll/timesheet numbers are in. Each entry
+// snapshots the wage at the time it's logged (not a live lookup of WAGES) so
+// an entry from an old pay period never shifts if a wage is edited later.
+// Persisted like everything else — see currentStateSnapshot/applyLoadedState.
+// SEP only: FWS hours draw against each student's own award, not the shared
+// Fall budget this log is meant to be checked against.
+// ---------------------------------------------------------------------------
+let HOURS_LOG = []; // [{ name, period, hours, wage, loggedAt }]
 
 // ---------------------------------------------------------------------------
 // Runtime-added students — legacy fallback only. Before real cross-device saving
@@ -1124,6 +1152,7 @@ function currentStateSnapshot() {
     savedAt: new Date().toISOString(),
     students: STUDENTS.map(s => JSON.parse(JSON.stringify(s))),
     grades, wages,
+    hoursLog: HOURS_LOG.map(e => ({ ...e })),
     knownLocations: [...KNOWN_LOCATIONS],
     settings: {
       annualAward: byId('annualAward'),
@@ -1151,6 +1180,7 @@ function applyLoadedState(state) {
   }
   if (Array.isArray(state.knownLocations)) state.knownLocations.forEach(registerLocation);
   STUDENTS.forEach(s => registerLocation(s.location));
+  HOURS_LOG = Array.isArray(state.hoursLog) ? state.hoursLog.map(e => ({ ...e })) : [];
   lastSavedAt = state.savedAt || null;
   return true;
 }
@@ -1823,6 +1853,16 @@ function recompute() {
   const fwsNames = new Set(NAMES.filter(isFWSStudent));
   const totalGrade = NAMES.reduce((a, n) => a + (fixedNames.has(n) || fwsNames.has(n) ? 0 : grades[n]), 0) || 1;
 
+  // Hours actually worked so far this semester, logged by hand per pay period —
+  // checked against the shared Fall budget the same way the projected schedule
+  // is, so FWS entries (which draw against each student's own award, not this
+  // shared pool) are excluded here too.
+  const sepHoursLog = HOURS_LOG.filter(e => !fwsNames.has(e.name));
+  const hoursWorkedTotal = sepHoursLog.reduce((a, e) => a + (Number(e.hours) || 0), 0);
+  const hoursWorkedPayroll = sepHoursLog.reduce((a, e) => a + (Number(e.hours) || 0) * (Number(e.wage) || 0), 0);
+  const hoursRemaining = Math.max(0, fallBudget - hoursWorkedTotal);
+  const overWorkedHours = hoursWorkedTotal > fallBudget;
+
   // A fixed schedule is an external hard commitment and can fall outside the
   // department's own open hours (different building, different arrangement) — widen
   // the shared solving/display window (WINDOW_START/END) to cover it, so it's never
@@ -1903,6 +1943,7 @@ function recompute() {
 
   return {
     fallBudget, budgetMode, budgetHours, budgetAward, budgetRate, annualAward, springRemaining, overAnnualAward, usableWeeks, weeklyCap, minShift, maxConcurrent, weeklyRate, grades, totalGrade,
+    hoursWorkedTotal, hoursWorkedPayroll, hoursRemaining, overWorkedHours,
     windowStart: WINDOW_START, windowEnd: WINDOW_END, deptStart, deptEnd,
     capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
     withFri, noFri, schedWithFri, schedNoFri,
@@ -2377,6 +2418,7 @@ function removeStudent(name) {
   document.getElementById('gradecard_' + slug(name))?.remove();
   document.getElementById('rostercard_' + slug(name))?.remove();
   refreshStudentSelect();
+  refreshHwStudentSelect();
   refreshGridLocationSelects();
   renderAll();
 }
@@ -2840,6 +2882,20 @@ function renderAll() {
   document.getElementById('weeklyPayrollOut').textContent = '$' + weeklyPayroll.toFixed(2);
   document.getElementById('semesterPayrollOut').textContent = '$' + semesterPayroll.toFixed(2);
 
+  document.getElementById('hwTotalOut').textContent = state.hoursWorkedTotal.toFixed(2) + 'h';
+  const hwRemOut = document.getElementById('hwRemainingOut');
+  hwRemOut.textContent = state.hoursRemaining.toFixed(2) + 'h';
+  hwRemOut.style.color = state.overWorkedHours ? 'var(--alarm)' : '';
+  const hwRemHint = document.getElementById('hwRemainingHint');
+  if (hwRemHint) {
+    hwRemHint.textContent = state.overWorkedHours
+      ? `⚠ ${state.hoursWorkedTotal.toFixed(2)}h logged exceeds the ${state.fallBudget.toFixed(1)}h fall budget`
+      : `= ${state.fallBudget.toFixed(1)}h fall budget − ${state.hoursWorkedTotal.toFixed(2)}h logged`;
+    hwRemHint.classList.toggle('is-warn', state.overWorkedHours);
+  }
+  document.getElementById('hwPayrollOut').textContent = '$' + state.hoursWorkedPayroll.toFixed(2);
+  renderHoursWorkedList();
+
   NAMES.forEach(n => {
     const id = 'grade_' + slug(n);
     const w = document.getElementById(id + '_weight');
@@ -2982,6 +3038,26 @@ function wireControls() {
   refreshStudentSelect();
   document.getElementById('studentSelect').addEventListener('change', renderAll);
 
+  refreshHwStudentSelect();
+  document.getElementById('hwAddBtn').addEventListener('click', () => {
+    const sel = document.getElementById('hwStudentSelect');
+    const periodEl = document.getElementById('hwPeriodInput');
+    const hoursEl = document.getElementById('hwHoursInput');
+    const name = sel.value;
+    const period = periodEl.value.trim();
+    const hours = Math.max(0, num('hwHoursInput', 0));
+    if (!name || !hours) return;
+    HOURS_LOG.push({ name, period, hours, wage: WAGES[name] ?? DEFAULT_WAGE, loggedAt: new Date().toISOString() });
+    periodEl.value = '';
+    hoursEl.value = '';
+    renderAll();
+  });
+  document.getElementById('hwList').addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    HOURS_LOG.splice(+e.target.dataset.i, 1);
+    renderAll();
+  });
+
   document.querySelectorAll('.tabs button[role="tab"]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tabs button[role="tab"]').forEach(b => b.setAttribute('aria-selected', 'false'));
@@ -3017,6 +3093,33 @@ function refreshStudentSelect() {
   const prior = sel.value;
   sel.innerHTML = NAMES.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   if (prior && NAMES.includes(prior)) sel.value = prior;
+}
+// Rebuilds the Hours Worked student dropdown — SEP only, since FWS hours draw
+// against each student's own award rather than the shared Fall budget this
+// log is checked against.
+function refreshHwStudentSelect() {
+  const sel = document.getElementById('hwStudentSelect');
+  if (!sel) return;
+  const prior = sel.value;
+  const sepNames = NAMES.filter(n => !isFWSStudent(STUDENTS.find(s => s.name === n)));
+  sel.innerHTML = sepNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if (prior && sepNames.includes(prior)) sel.value = prior;
+}
+// Newest-first list of logged hours-worked entries. data-i on the remove
+// button is the entry's real index in HOURS_LOG (not its position in this
+// sorted display), so removal always hits the right entry.
+function renderHoursWorkedList() {
+  const list = document.getElementById('hwList');
+  if (!list) return;
+  // Wage is payroll-adjacent like everywhere else in this app (roster faders,
+  // the Budget panel's $ readouts) — mask it behind .admin-only here too, even
+  // though the hours themselves stay visible to any viewer.
+  const rows = HOURS_LOG.map((e, i) => ({ ...e, i })).sort((a, b) => (b.loggedAt || '').localeCompare(a.loggedAt || ''));
+  list.innerHTML = rows.map(e =>
+    `<li><span>${esc(e.name)} — ${esc(e.period || 'unlabeled period')}: ${(Number(e.hours) || 0).toFixed(2)}h</span>` +
+    `<span class="hw-wage admin-only">$${(Number(e.wage) || 0).toFixed(2)}/hr</span>` +
+    `<button type="button" class="rm-btn" data-i="${e.i}">×</button></li>`
+  ).join('');
 }
 // Rebuilds each Grid tab's location filter from KNOWN_LOCATIONS, keeping the
 // current selection when it still exists.
@@ -3147,6 +3250,7 @@ function wireAddStudentPanel() {
     colorIndexFor(name); // reserve a stable slice-view color slot now
     appendFader(name, 5, DEFAULT_WAGE);
     refreshStudentSelect();
+    refreshHwStudentSelect();
     refreshGridLocationSelects();
     if (reviewingIntakeId != null) {
       stagedIntakeIds.push(reviewingIntakeId);
