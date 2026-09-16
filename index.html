@@ -292,7 +292,8 @@
   .classes-editor .block-row { gap: 4px; }
   .classes-editor .block-row select,
   .classes-editor .block-row input[type="time"],
-  .classes-editor .block-row input[type="text"] { font-size: 10.5px; padding: 4px 5px; }
+  .classes-editor .block-row input[type="text"],
+  .classes-editor .block-row input[type="number"] { font-size: 10.5px; padding: 4px 5px; }
   .classes-editor ul.block-list li { font-size: 10.5px; }
 
   .roster-grid {
@@ -613,13 +614,7 @@
 
       <section class="panel" id="hoursWorkedPanel">
         <h2>Hours Worked <span class="hint">actual hours logged per pay period, SEP only</span></h2>
-        <div class="block-row">
-          <select id="hwStudentSelect"></select>
-          <input type="text" id="hwPeriodInput" placeholder="Pay period (e.g. Aug 16–31)">
-          <input type="number" id="hwHoursInput" placeholder="Hours" min="0" step="0.25">
-          <button type="button" class="add-block-btn" id="hwAddBtn">+</button>
-        </div>
-        <ul class="block-list" id="hwList"></ul>
+        <p class="hint">Log a student's hours on their card on the Roster tab — these are the totals across everyone.</p>
         <div class="readout"><span>Total hours worked (SEP)</span><span id="hwTotalOut" class="mono">—</span></div>
         <div class="readout"><span>Fall hours remaining</span><span id="hwRemainingOut" class="mono">—</span></div>
         <p class="hint budget-derivation" id="hwRemainingHint"></p>
@@ -2035,6 +2030,19 @@ function classBlockListMarkup(n) {
     `<li><span>${esc(c.day)} ${esc(c.course || c.type)} ${fmtClock(c.start)}–${fmtClock(c.end)}</span><button type="button" class="rm-btn" data-i="${c.i}">×</button></li>`
   ).join('');
 }
+// data-i on the remove button is this entry's real index in the flat global
+// HOURS_LOG array (not its position in this per-student, newest-first list),
+// so removal always hits the right entry even though entries for every
+// student share one underlying array.
+function hwBlockListMarkup(n) {
+  const items = HOURS_LOG.map((e, i) => ({ ...e, i })).filter(e => e.name === n)
+    .sort((a, b) => (b.loggedAt || '').localeCompare(a.loggedAt || ''));
+  return items.map(e =>
+    `<li><span>${esc(e.period || 'unlabeled period')}: ${(Number(e.hours) || 0).toFixed(2)}h</span>` +
+    `<span class="hw-wage admin-only">$${(Number(e.wage) || 0).toFixed(2)}/hr</span>` +
+    `<button type="button" class="rm-btn" data-i="${e.i}">×</button></li>`
+  ).join('');
+}
 // The Grades panel (landing page, left sidebar) stays a compact list — just
 // name + grade slider — so it doesn't grow with the rest of a student's
 // details. Everything else lives in the matching Roster card (Roster tab).
@@ -2068,6 +2076,7 @@ function rosterCardMarkup(n, wage) {
   const fixId = 'fixed_' + slug(n);
   const clsId = 'classes_' + slug(n);
   const typeId = 'type_' + slug(n);
+  const hwId = 'hw_' + slug(n);
   const fixed = isFixedStudent(n);
   const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
   const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
@@ -2077,6 +2086,9 @@ function rosterCardMarkup(n, wage) {
   const availCount = auto ? autoBlocks.length : (student.availability || []).length;
   const studentType = student.studentType === 'FWS' ? 'FWS' : 'SEP';
   const award = Math.max(0, student.semesterAward || 0);
+  const hwEntries = HOURS_LOG.filter(e => e.name === n);
+  const hwCount = hwEntries.length;
+  const hwTotal = hwEntries.reduce((a, e) => a + (Number(e.hours) || 0), 0);
   return `<div class="fader roster-card panel${fixed ? ' is-fixed' : ''}${studentType === 'FWS' ? ' is-fws' : ''}" id="rostercard_${slug(n)}" data-student="${esc(n)}">
       <div class="fader-top">
         <span class="fader-name">${esc(n)}${studentType === 'FWS' ? ' <span class="fws-badge">FWS</span>' : ''}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}</span>
@@ -2147,6 +2159,18 @@ function rosterCardMarkup(n, wage) {
           <ul class="block-list" id="${clsId}_list">${classBlockListMarkup(n)}</ul>
         </div>
       </details>
+      <details class="fader-classes" id="${hwId}_panel"${studentType === 'FWS' ? ' hidden' : ''}>
+        <summary>Hours worked <span class="count-badge" id="${hwId}_count">(${hwCount})</span></summary>
+        <div class="classes-editor">
+          <div class="block-row">
+            <input type="text" id="${hwId}_period" placeholder="Pay period (e.g. Aug 16–31)">
+            <input type="number" id="${hwId}_hours" placeholder="Hours" min="0" step="0.25">
+            <button type="button" class="add-block-btn" id="${hwId}_addBtn">+</button>
+          </div>
+          <ul class="block-list" id="${hwId}_list">${hwBlockListMarkup(n)}</ul>
+          <div class="readout"><span>Logged this semester</span><span id="${hwId}_total" class="mono">${hwTotal.toFixed(2)}h</span></div>
+        </div>
+      </details>
       <div class="remove-student-row">
         <button type="button" class="remove-student-btn">Remove student…</button>
         <div class="remove-confirm" hidden>
@@ -2195,11 +2219,16 @@ function wireRosterCard(n) {
   const awardWrap = document.getElementById(typeId + '_awardWrap');
   const awardInput = document.getElementById(typeId + '_award');
   const gradeCardEl = document.getElementById('gradecard_' + slug(n));
+  const hwPanel = document.getElementById('hw_' + slug(n) + '_panel');
   typeSel.addEventListener('change', () => {
     const s = STUDENTS.find(x => x.name === n);
     if (s) s.studentType = typeSel.value;
     awardWrap.hidden = typeSel.value !== 'FWS';
     if (gradeCardEl) gradeCardEl.classList.toggle('is-fws', typeSel.value === 'FWS');
+    // Hours Worked is SEP-only (FWS hours draw against the student's own
+    // award, not the shared Fall budget this log is checked against) — hide
+    // the panel the moment a student flips to FWS, same as the Budget panel.
+    if (hwPanel) hwPanel.hidden = typeSel.value === 'FWS';
     persistIfCustom();
     renderAll();
   });
@@ -2381,6 +2410,40 @@ function wireRosterCard(n) {
     renderAll();
   });
 
+  // Hours Worked — logged per student, right here on their card, rather than
+  // through a shared dropdown-driven panel. HOURS_LOG itself stays one flat
+  // array (see its declaration), so add/remove here just filters/splices by
+  // name; the sidebar Hours Worked panel's totals are aggregate readouts
+  // computed from the same array in recompute()/renderAll().
+  const hwId = 'hw_' + slug(n);
+  const hwList = document.getElementById(hwId + '_list');
+  const hwCountEl = document.getElementById(hwId + '_count');
+  const hwTotalEl = document.getElementById(hwId + '_total');
+  const refreshHwCard = () => {
+    hwList.innerHTML = hwBlockListMarkup(n);
+    const entries = HOURS_LOG.filter(e => e.name === n);
+    hwCountEl.textContent = `(${entries.length})`;
+    hwTotalEl.textContent = entries.reduce((a, e) => a + (Number(e.hours) || 0), 0).toFixed(2) + 'h';
+  };
+  document.getElementById(hwId + '_addBtn').addEventListener('click', () => {
+    const periodEl = document.getElementById(hwId + '_period');
+    const hoursEl = document.getElementById(hwId + '_hours');
+    const period = periodEl.value.trim();
+    const hours = Math.max(0, parseFloat(hoursEl.value) || 0);
+    if (!hours) return;
+    HOURS_LOG.push({ name: n, period, hours, wage: WAGES[n] ?? DEFAULT_WAGE, loggedAt: new Date().toISOString() });
+    periodEl.value = '';
+    hoursEl.value = '';
+    refreshHwCard();
+    renderAll();
+  });
+  hwList.addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    HOURS_LOG.splice(+e.target.dataset.i, 1);
+    refreshHwCard();
+    renderAll();
+  });
+
   // Remove student — a two-step inline confirm (no native confirm() dialog,
   // consistent with the rest of this app) rather than a single click, since
   // this is a bigger action than any other control on this card.
@@ -2418,7 +2481,6 @@ function removeStudent(name) {
   document.getElementById('gradecard_' + slug(name))?.remove();
   document.getElementById('rostercard_' + slug(name))?.remove();
   refreshStudentSelect();
-  refreshHwStudentSelect();
   refreshGridLocationSelects();
   renderAll();
 }
@@ -2894,7 +2956,6 @@ function renderAll() {
     hwRemHint.classList.toggle('is-warn', state.overWorkedHours);
   }
   document.getElementById('hwPayrollOut').textContent = '$' + state.hoursWorkedPayroll.toFixed(2);
-  renderHoursWorkedList();
 
   NAMES.forEach(n => {
     const id = 'grade_' + slug(n);
@@ -3038,26 +3099,6 @@ function wireControls() {
   refreshStudentSelect();
   document.getElementById('studentSelect').addEventListener('change', renderAll);
 
-  refreshHwStudentSelect();
-  document.getElementById('hwAddBtn').addEventListener('click', () => {
-    const sel = document.getElementById('hwStudentSelect');
-    const periodEl = document.getElementById('hwPeriodInput');
-    const hoursEl = document.getElementById('hwHoursInput');
-    const name = sel.value;
-    const period = periodEl.value.trim();
-    const hours = Math.max(0, num('hwHoursInput', 0));
-    if (!name || !hours) return;
-    HOURS_LOG.push({ name, period, hours, wage: WAGES[name] ?? DEFAULT_WAGE, loggedAt: new Date().toISOString() });
-    periodEl.value = '';
-    hoursEl.value = '';
-    renderAll();
-  });
-  document.getElementById('hwList').addEventListener('click', e => {
-    if (!e.target.classList.contains('rm-btn')) return;
-    HOURS_LOG.splice(+e.target.dataset.i, 1);
-    renderAll();
-  });
-
   document.querySelectorAll('.tabs button[role="tab"]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tabs button[role="tab"]').forEach(b => b.setAttribute('aria-selected', 'false'));
@@ -3093,33 +3134,6 @@ function refreshStudentSelect() {
   const prior = sel.value;
   sel.innerHTML = NAMES.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   if (prior && NAMES.includes(prior)) sel.value = prior;
-}
-// Rebuilds the Hours Worked student dropdown — SEP only, since FWS hours draw
-// against each student's own award rather than the shared Fall budget this
-// log is checked against.
-function refreshHwStudentSelect() {
-  const sel = document.getElementById('hwStudentSelect');
-  if (!sel) return;
-  const prior = sel.value;
-  const sepNames = NAMES.filter(n => !isFWSStudent(STUDENTS.find(s => s.name === n)));
-  sel.innerHTML = sepNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
-  if (prior && sepNames.includes(prior)) sel.value = prior;
-}
-// Newest-first list of logged hours-worked entries. data-i on the remove
-// button is the entry's real index in HOURS_LOG (not its position in this
-// sorted display), so removal always hits the right entry.
-function renderHoursWorkedList() {
-  const list = document.getElementById('hwList');
-  if (!list) return;
-  // Wage is payroll-adjacent like everywhere else in this app (roster faders,
-  // the Budget panel's $ readouts) — mask it behind .admin-only here too, even
-  // though the hours themselves stay visible to any viewer.
-  const rows = HOURS_LOG.map((e, i) => ({ ...e, i })).sort((a, b) => (b.loggedAt || '').localeCompare(a.loggedAt || ''));
-  list.innerHTML = rows.map(e =>
-    `<li><span>${esc(e.name)} — ${esc(e.period || 'unlabeled period')}: ${(Number(e.hours) || 0).toFixed(2)}h</span>` +
-    `<span class="hw-wage admin-only">$${(Number(e.wage) || 0).toFixed(2)}/hr</span>` +
-    `<button type="button" class="rm-btn" data-i="${e.i}">×</button></li>`
-  ).join('');
 }
 // Rebuilds each Grid tab's location filter from KNOWN_LOCATIONS, keeping the
 // current selection when it still exists.
@@ -3250,7 +3264,6 @@ function wireAddStudentPanel() {
     colorIndexFor(name); // reserve a stable slice-view color slot now
     appendFader(name, 5, DEFAULT_WAGE);
     refreshStudentSelect();
-    refreshHwStudentSelect();
     refreshGridLocationSelects();
     if (reviewingIntakeId != null) {
       stagedIntakeIds.push(reviewingIntakeId);
