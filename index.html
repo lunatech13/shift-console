@@ -416,6 +416,7 @@
   .individual-grids h3 { font-size: 15px; margin-bottom: 8px; color: var(--muted); }
 
   td.cell.sched { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  td.cell.locked { background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: inset 0 0 0 2px var(--ink); }
   td.cell.offered { background: var(--accent-soft); color: var(--accent-soft-ink); font-weight: 400; font-size: 10px; }
   td.cell.class-block { background: var(--slate-soft); color: var(--slate-ink); font-size: 9.5px; }
   td.cell.internship-block { background: var(--amber-soft); color: var(--amber); font-size: 9.5px; }
@@ -1165,6 +1166,7 @@ function applyLoadedState(state) {
     ...s,
     availability: s.availability || [],
     classes: s.classes || [],
+    lockedBlocks: s.lockedBlocks || [], // saves made before per-slot locking existed
     studentType: s.studentType || 'SEP', // saves made before SEP/FWS existed
   })));
   NAMES.length = 0;
@@ -1650,6 +1652,32 @@ function buildBlocks(students, excludeDays, deptStart, deptEnd) {
   return out;
 }
 
+// Locked hours — a guaranteed slot within an otherwise-flexible student's
+// schedule (e.g. "the student agreed to always work Tue 2-4pm"), entered
+// directly on their roster card as its own list, separate from their stated
+// availability. Same shape as buildBlocks' output so it can flow through
+// buildScenario's collision/grouping logic unchanged; clipped to department
+// open hours like ordinary availability (unlike a Fixed schedule's external
+// hard hours, a locked slot is a shift at this job, so it should already
+// fall within the department's window). Skips Fixed students entirely —
+// their whole schedule is already guaranteed, a locked sub-block would be
+// redundant (and the roster card UI hides the editor for them too).
+function buildLockedBlocks(students, excludeDays, deptStart, deptEnd) {
+  if (deptStart === undefined) deptStart = WINDOW_START;
+  if (deptEnd === undefined) deptEnd = WINDOW_END;
+  const out = [];
+  for (const s of students) {
+    if (s.fixed) continue;
+    for (const b of (s.lockedBlocks || [])) {
+      if (excludeDays.includes(b.day)) continue;
+      const start = Math.max(b.start, deptStart), end = Math.min(b.end, deptEnd);
+      if (end - start <= 1e-9) continue;
+      out.push({ student: s.name, day: b.day, start, orig: round4(end - start), location: s.location || DEFAULT_LOCATION });
+    }
+  }
+  return out;
+}
+
 function allocateStudentBlocks(dayBlocks, goalHours, minShift) {
   const usable = dayBlocks.filter(b => b.orig >= minShift - 1e-9);
   const totalUsable = usable.reduce((a, b) => a + b.orig, 0);
@@ -1748,9 +1776,24 @@ function enforceBudgetCap(allocated, weight, minShift, cap) {
   return { allocated: kept, trimmed: true, droppedStudents };
 }
 
-function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap, fixedNames, fwsNames) {
+function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap, fixedNames, fwsNames, lockedBlocks) {
   fixedNames = fixedNames || new Set();
   fwsNames = fwsNames || new Set();
+  // Locked blocks are guaranteed in full, exactly like a Fixed student's
+  // hours — never proportionally shaved, never budget-trimmed — but only for
+  // THIS student's own locked slot(s), while the rest of their schedule is
+  // still solved normally. Collected up front so both the per-student goal
+  // below (reduced by however much of their target is already locked in)
+  // and the final row list (added straight in, bypassing every trimming
+  // step) can use it.
+  const lockedByStudent = {};
+  for (const b of (lockedBlocks || [])) (lockedByStudent[b.student] ??= []).push(b);
+  const lockedAllocated = [];
+  const lockedHoursByStudent = {};
+  for (const [student, blist] of Object.entries(lockedByStudent)) {
+    for (const b of blist) lockedAllocated.push({ student, day: b.day, start: b.start, orig: b.orig, dur: b.orig, location: b.location, locked: true });
+    lockedHoursByStudent[student] = (lockedHoursByStudent[student] || 0) + blist.reduce((a, b) => a + b.orig, 0);
+  }
   const byStudent = {};
   for (const b of blocks) (byStudent[b.student] ??= []).push(b);
   let allAllocated = [];
@@ -1763,7 +1806,11 @@ function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap
       for (const b of blist) fixedAllocated.push({ student, day: b.day, start: b.start, orig: b.orig, dur: b.orig, location: b.location });
       continue;
     }
-    const allocated = allocateStudentBlocks(blist, goals[student] || 0, minShift);
+    // A locked slot counts toward this student's own target — the flexible
+    // solver below only needs to fill whatever's left of it, from their
+    // OTHER (non-locked) availability.
+    const remainingGoal = Math.max(0, (goals[student] || 0) - (lockedHoursByStudent[student] || 0));
+    const allocated = allocateStudentBlocks(blist, remainingGoal, minShift);
     if (fwsNames.has(student)) {
       // FWS: allocated the same way as SEP (proportionally fit to their own goal
       // hours) but never trimmed by the SEP budget cap below — that cap belongs
@@ -1774,15 +1821,14 @@ function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap
       // same shave-then-drop trim here, scoped to just this student against
       // their own award-derived goal instead of the shared SEP budget.
       const withStudent = allocated.map(a => ({ student, ...a }));
-      const ownGoal = goals[student] || 0;
-      const trimmed = enforceBudgetCap(withStudent, weight, minShift, ownGoal);
+      const trimmed = enforceBudgetCap(withStudent, weight, minShift, remainingGoal);
       fwsAllocated.push(...trimmed.allocated);
     } else {
       for (const a of allocated) allAllocated.push({ student, ...a });
     }
   }
   const capResult = enforceBudgetCap(allAllocated, weight, minShift, budgetCap);
-  allAllocated = capResult.allocated.concat(fixedAllocated).concat(fwsAllocated);
+  allAllocated = capResult.allocated.concat(fixedAllocated).concat(fwsAllocated).concat(lockedAllocated);
 
   // Group by (day, location) — not just day — so the concurrency cap is enforced
   // per physical room. Two people scheduled at the same time in different
@@ -1887,13 +1933,31 @@ function recompute() {
   for (const b of blocksWithFri) capWithFri[b.student] += b.orig;
   for (const b of blocksNoFri) capNoFri[b.student] += b.orig;
 
+  // Locked hours (a guaranteed slot within an otherwise-flexible student's
+  // schedule) — same "off the top, before weighting" treatment as Fixed
+  // students' hours just below, but only for the SEP-weighted pool: FWS
+  // locked hours are handled entirely within that student's own award-based
+  // goal in buildScenario, since they never drew from this shared pool.
+  const lockedBlocksWithFri = buildLockedBlocks(STUDENTS, [], deptStart, deptEnd);
+  const lockedBlocksNoFri = buildLockedBlocks(STUDENTS, ['Friday'], deptStart, deptEnd);
+  const lockedHoursWithFri = {}, lockedHoursNoFri = {};
+  for (const n of NAMES) { lockedHoursWithFri[n] = 0; lockedHoursNoFri[n] = 0; }
+  for (const b of lockedBlocksWithFri) lockedHoursWithFri[b.student] = (lockedHoursWithFri[b.student] || 0) + b.orig;
+  for (const b of lockedBlocksNoFri) lockedHoursNoFri[b.student] = (lockedHoursNoFri[b.student] || 0) + b.orig;
+  const lockedSepHoursWithFri = lockedBlocksWithFri
+    .filter(b => !fixedNames.has(b.student) && !fwsNames.has(b.student))
+    .reduce((a, b) => a + b.orig, 0);
+  const lockedSepHoursNoFri = lockedBlocksNoFri
+    .filter(b => !fixedNames.has(b.student) && !fwsNames.has(b.student))
+    .reduce((a, b) => a + b.orig, 0);
+
   // Fixed-schedule students draw their exact stated hours off the top of the shared
   // weekly pool before grade weighting splits what's left among everyone else — a hard
   // schedule never competes for budget on equal footing, it's honored first.
   const fixedHoursWithFri = [...fixedNames].reduce((a, n) => a + capWithFri[n], 0);
   const fixedHoursNoFri = [...fixedNames].reduce((a, n) => a + capNoFri[n], 0);
-  const flexRateWithFri = Math.max(0, weeklyRate - fixedHoursWithFri);
-  const flexRateNoFri = Math.max(0, weeklyRate - fixedHoursNoFri);
+  const flexRateWithFri = Math.max(0, weeklyRate - fixedHoursWithFri - lockedSepHoursWithFri);
+  const flexRateNoFri = Math.max(0, weeklyRate - fixedHoursNoFri - lockedSepHoursNoFri);
 
   const weight = {}, rawTarget = {}, cappedTarget = {}, goalNoFri = {}, fwsWeeklyHours = {};
   for (const n of NAMES) {
@@ -1915,14 +1979,26 @@ function recompute() {
       goalNoFri[n] = Math.min(weeklyHours, capNoFri[n], weeklyCap);
     } else {
       weight[n] = grades[n] / totalGrade;
-      rawTarget[n] = weight[n] * flexRateWithFri;
+      // Personalized flex rate: every OTHER flexible/fixed student's locked
+      // hours count against the shared pool this student's share is drawn
+      // from (that's the "deducted for other remaining slots" Paul asked
+      // for), but THIS student's own locked hours don't also shrink their
+      // own weighted ceiling — those hours are already spoken for
+      // specifically as theirs, not competing with their own remaining
+      // share. (The aggregate budgetCap passed to buildScenario below still
+      // subtracts every locked hour, including this student's own — that's
+      // what keeps the total pool honest; this personalization only affects
+      // the per-student target used to judge "how much is X eligible for.")
+      const personalFlexWithFri = Math.max(0, weeklyRate - fixedHoursWithFri - (lockedSepHoursWithFri - lockedHoursWithFri[n]));
+      const personalFlexNoFri = Math.max(0, weeklyRate - fixedHoursNoFri - (lockedSepHoursNoFri - lockedHoursNoFri[n]));
+      rawTarget[n] = weight[n] * personalFlexWithFri;
       cappedTarget[n] = Math.min(rawTarget[n], capWithFri[n], weeklyCap);
-      goalNoFri[n] = Math.min(weight[n] * flexRateNoFri, capNoFri[n], weeklyCap);
+      goalNoFri[n] = Math.min(weight[n] * personalFlexNoFri, capNoFri[n], weeklyCap);
     }
   }
 
-  const withFri = buildScenario(blocksWithFri, cappedTarget, weight, minShift, maxConcurrent, flexRateWithFri, fixedNames, fwsNames);
-  const noFri = buildScenario(blocksNoFri, goalNoFri, weight, minShift, maxConcurrent, flexRateNoFri, fixedNames, fwsNames);
+  const withFri = buildScenario(blocksWithFri, cappedTarget, weight, minShift, maxConcurrent, flexRateWithFri, fixedNames, fwsNames, lockedBlocksWithFri);
+  const noFri = buildScenario(blocksNoFri, goalNoFri, weight, minShift, maxConcurrent, flexRateNoFri, fixedNames, fwsNames, lockedBlocksNoFri);
 
   const schedWithFri = {}, schedNoFri = {};
   for (const n of NAMES) { schedWithFri[n] = 0; schedNoFri[n] = 0; }
@@ -1943,7 +2019,7 @@ function recompute() {
     capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
     withFri, noFri, schedWithFri, schedNoFri,
     wages, weeklyCostWithFri, weeklyCostNoFri, semesterCostWithFri,
-    locations, activeLocations, fixedNames, fwsNames, fwsWeeklyHours,
+    locations, activeLocations, fixedNames, fwsNames, fwsWeeklyHours, lockedHoursWithFri,
   };
 }
 
@@ -2014,6 +2090,18 @@ function fixedBlockListMarkup(n) {
     `<li><span>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span><button type="button" class="rm-btn" data-i="${b.i}">×</button></li>`
   ).join('');
 }
+// Locked-hours list for a roster card — same shape/sort as fixedBlockListMarkup
+// but reads s.lockedBlocks, a separate array from s.availability (a locked
+// slot is additive on top of otherwise-normal, dynamically-solved availability,
+// not a reinterpretation of it the way Fixed does).
+function lockedBlockListMarkup(n) {
+  const s = STUDENTS.find(x => x.name === n);
+  const items = ((s && s.lockedBlocks) || []).map((b, i) => ({ ...b, i }))
+    .sort((a, b) => ALL_DAYS.indexOf(a.day) - ALL_DAYS.indexOf(b.day) || a.start - b.start);
+  return items.map(b =>
+    `<li><span>🔒 ${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</span><button type="button" class="rm-btn" data-i="${b.i}">×</button></li>`
+  ).join('');
+}
 function autoPreviewListMarkup(blocks) {
   if (!blocks.length) return '<li class="empty-hint">No open hours in this window — classes/blocks fill every day.</li>';
   return blocks.map(b => `<li>${esc(b.day)} ${fmtClock(b.start)}–${fmtClock(b.end)}</li>`).join('');
@@ -2077,6 +2165,7 @@ function rosterCardMarkup(n, wage) {
   const clsId = 'classes_' + slug(n);
   const typeId = 'type_' + slug(n);
   const hwId = 'hw_' + slug(n);
+  const lockId = 'locked_' + slug(n);
   const fixed = isFixedStudent(n);
   const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
   const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
@@ -2089,6 +2178,9 @@ function rosterCardMarkup(n, wage) {
   const hwEntries = HOURS_LOG.filter(e => e.name === n);
   const hwCount = hwEntries.length;
   const hwTotal = hwEntries.reduce((a, e) => a + (Number(e.hours) || 0), 0);
+  const lockedEntries = student.lockedBlocks || [];
+  const lockedCount = lockedEntries.length;
+  const lockedTotal = lockedEntries.reduce((a, b) => a + Math.max(0, b.end - b.start), 0);
   return `<div class="fader roster-card panel${fixed ? ' is-fixed' : ''}${studentType === 'FWS' ? ' is-fws' : ''}" id="rostercard_${slug(n)}" data-student="${esc(n)}">
       <div class="fader-top">
         <span class="fader-name">${esc(n)}${studentType === 'FWS' ? ' <span class="fws-badge">FWS</span>' : ''}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}</span>
@@ -2145,6 +2237,21 @@ function rosterCardMarkup(n, wage) {
           <ul class="block-list" id="${fixId}_list">${fixedBlockListMarkup(n)}</ul>
         </div>
       </div>
+      <details class="fader-classes" id="${lockId}_panel"${fixed ? ' hidden' : ''}>
+        <summary>Locked hours <span class="count-badge" id="${lockId}_count">(${lockedCount})</span></summary>
+        <div class="classes-editor">
+          <p class="hint">Guaranteed regardless of grade weighting — subtracted from the shared budget and from this student's own flexible target.</p>
+          <div class="block-row">
+            <select id="${lockId}_day">${dayOpts}</select>
+            <input type="time" id="${lockId}_start">
+            <input type="time" id="${lockId}_end">
+            <button type="button" class="add-block-btn" id="${lockId}_addBtn">+</button>
+          </div>
+          <ul class="block-list" id="${lockId}_list">${lockedBlockListMarkup(n)}</ul>
+          <div class="readout"><span>Locked this week</span><span id="${lockId}_total" class="mono">${lockedTotal.toFixed(2)}h</span></div>
+          <p class="hint budget-derivation" id="${lockId}_hint"></p>
+        </div>
+      </details>
       <details class="fader-classes">
         <summary>Class / blocked-off schedule <span class="count-badge" id="${clsId}_count">(${classCount})</span></summary>
         <div class="classes-editor">
@@ -2330,6 +2437,11 @@ function wireRosterCard(n) {
     if (s) s.fixed = fixChk.checked;
     fixEditor.hidden = !fixChk.checked;
     availWrap.hidden = fixChk.checked;
+    // A locked slot would be redundant once every hour is already guaranteed
+    // by Fixed — hide the editor (data stays put, just unused by the solver:
+    // buildLockedBlocks skips Fixed students outright).
+    const lockedPanelEl = document.getElementById('locked_' + slug(n) + '_panel');
+    if (lockedPanelEl) lockedPanelEl.hidden = fixChk.checked;
     // The grade slider lives in a separate card now (Grades panel vs. Roster
     // tab), so both need the is-fixed class kept in sync — the roster card's
     // own copy is currently a no-op for styling but kept for consistency.
@@ -2369,6 +2481,48 @@ function wireRosterCard(n) {
     persistIfCustom();
     refreshFixedList();
     refreshAvailList();
+    renderAll();
+  });
+
+  // Locked hours — a guaranteed slot on top of this student's otherwise-normal,
+  // dynamically-solved availability. Its own array (s.lockedBlocks), separate
+  // from s.availability, so it never interferes with the Fixed/Auto editors
+  // above. The solver (buildLockedBlocks / buildScenario) subtracts it from
+  // both the shared budget pool and this student's own flexible target — see
+  // the comments there for the full mechanics.
+  const lockId = 'locked_' + slug(n);
+  const lockList = document.getElementById(lockId + '_list');
+  const lockCountEl = document.getElementById(lockId + '_count');
+  const lockTotalEl = document.getElementById(lockId + '_total');
+  const refreshLockedCard = () => {
+    lockList.innerHTML = lockedBlockListMarkup(n);
+    const s = STUDENTS.find(x => x.name === n);
+    const entries = (s && s.lockedBlocks) || [];
+    lockCountEl.textContent = `(${entries.length})`;
+    lockTotalEl.textContent = entries.reduce((a, b) => a + Math.max(0, b.end - b.start), 0).toFixed(2) + 'h';
+  };
+  document.getElementById(lockId + '_addBtn').addEventListener('click', () => {
+    const day = document.getElementById(lockId + '_day').value;
+    const startStr = document.getElementById(lockId + '_start').value;
+    const endStr = document.getElementById(lockId + '_end').value;
+    if (!startStr || !endStr) return;
+    const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
+    if (end <= start) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.lockedBlocks = s.lockedBlocks || [];
+    s.lockedBlocks.push({ day, start, end });
+    persistIfCustom();
+    refreshLockedCard();
+    renderAll();
+  });
+  lockList.addEventListener('click', e => {
+    if (!e.target.classList.contains('rm-btn')) return;
+    const s = STUDENTS.find(x => x.name === n);
+    if (!s) return;
+    s.lockedBlocks.splice(+e.target.dataset.i, 1);
+    persistIfCustom();
+    refreshLockedCard();
     renderAll();
   });
 
@@ -2842,7 +2996,7 @@ function buildIndividualSegments(day, studentName, scenarioRows, student, window
     if (b - a <= 1e-9) continue;
     const mid = (a + b) / 2;
     const sched = schedRows.find(r => r.schedStart <= mid && (r.schedStart + r.dur) >= mid);
-    if (sched) { segs.push({ a, b, kind: 'scheduled' }); continue; }
+    if (sched) { segs.push({ a, b, kind: sched.locked ? 'locked' : 'scheduled' }); continue; }
     const cls = classBlocks.find(c => c.start <= mid && c.end >= mid);
     if (cls) { segs.push({ a, b, kind: 'class', course: cls.course, ctype: cls.type }); continue; }
     const off = availBlocks.find(x => x.start <= mid && x.end >= mid);
@@ -2892,6 +3046,7 @@ function renderIndividualGrid(containerId, studentName, scenarioRows, days, isNo
       const span = seg.r2 - seg.r1 + 1;
       let cls = 'blank', label2 = '';
       if (seg.kind === 'dropped') { cls = 'dropped'; label2 = 'Not scheduled<br>(Friday dropped)'; }
+      else if (seg.kind === 'locked') { cls = 'locked'; label2 = `🔒 LOCKED<br>${fmtRange(seg.a, seg.b)}`; }
       else if (seg.kind === 'scheduled') { cls = 'sched'; label2 = `SCHEDULED<br>${fmtRange(seg.a, seg.b)}`; }
       else if (seg.kind === 'offered') { cls = 'offered'; label2 = 'Offered'; }
       else if (seg.kind === 'class') { cls = seg.ctype === 'Internship' || seg.ctype === 'Outside Job' ? 'internship-block' : 'class-block'; label2 = `${esc(seg.course)}<br>(${seg.ctype === 'Internship' ? 'internship' : seg.ctype === 'Outside Job' ? 'job' : 'class'})`; }
@@ -2987,6 +3142,19 @@ function renderAll() {
           count.textContent = `(${blocks.length})`;
           count.classList.toggle('zero', !blocks.length);
         }
+      }
+    }
+
+    if (!(s && s.fixed)) {
+      const lockedHint = document.getElementById('locked_' + slug(n) + '_hint');
+      if (lockedHint) {
+        const locked = (state.lockedHoursWithFri && state.lockedHoursWithFri[n]) || 0;
+        const eligible = (state.cappedTarget && state.cappedTarget[n]) || 0;
+        const overLocked = locked > eligible + 1e-6;
+        lockedHint.textContent = overLocked
+          ? `⚠ ${locked.toFixed(2)}h locked exceeds this student's ${eligible.toFixed(2)}h eligible total — honored anyway`
+          : `= ${eligible.toFixed(2)}h eligible total, ${Math.max(0, eligible - locked).toFixed(2)}h left for flexible scheduling`;
+        lockedHint.classList.toggle('is-warn', overLocked);
       }
     }
   });
@@ -3257,6 +3425,7 @@ function wireAddStudentPanel() {
       autoAvailability: newAvailAuto.checked,
       availability: pendingAvail.map(b => ({ ...b })),
       classes: pendingClasses.map(c => ({ ...c })),
+      lockedBlocks: [],
     };
     STUDENTS.push(student);
     NAMES.push(name);
