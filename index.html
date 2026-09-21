@@ -776,8 +776,8 @@
           </label>
           <div class="block-row" id="newAvailManualRow" hidden>
             <select id="newAvailDay"></select>
-            <input type="time" id="newAvailStart">
-            <input type="time" id="newAvailEnd">
+            <input type="time" id="newAvailStart" value="09:00">
+            <input type="time" id="newAvailEnd" value="17:00">
             <button type="button" class="add-block-btn" id="addAvailBlockBtn">+</button>
           </div>
           <ul class="block-list" id="newAvailList" hidden></ul>
@@ -786,8 +786,8 @@
           <div class="block-row">
             <select id="newClassDay"></select>
             <input type="text" id="newClassCourse" placeholder="Course / name">
-            <input type="time" id="newClassStart">
-            <input type="time" id="newClassEnd">
+            <input type="time" id="newClassStart" value="09:00">
+            <input type="time" id="newClassEnd" value="17:00">
             <select id="newClassType">
               <option value="Class">Class</option>
               <option value="Internship">Internship</option>
@@ -2254,8 +2254,8 @@ function rosterCardMarkup(n, wage) {
         <div class="availability-editor" id="${availId}_manual"${auto ? ' hidden' : ''}>
           <div class="block-row">
             <select id="${availId}_day">${dayOpts}</select>
-            <input type="time" id="${availId}_start">
-            <input type="time" id="${availId}_end">
+            <input type="time" id="${availId}_start" value="09:00">
+            <input type="time" id="${availId}_end" value="17:00">
             <button type="button" class="add-block-btn" id="${availId}_addBtn">+</button>
           </div>
           <ul class="block-list" id="${availId}_list">${fixedBlockListMarkup(n)}</ul>
@@ -2270,8 +2270,8 @@ function rosterCardMarkup(n, wage) {
         <div class="fixed-editor" id="${fixId}_editor"${fixed ? '' : ' hidden'}>
           <div class="block-row">
             <select id="${fixId}_day">${dayOpts}</select>
-            <input type="time" id="${fixId}_start">
-            <input type="time" id="${fixId}_end">
+            <input type="time" id="${fixId}_start" value="09:00">
+            <input type="time" id="${fixId}_end" value="17:00">
             <button type="button" class="add-block-btn" id="${fixId}_addBtn">+</button>
           </div>
           <ul class="block-list" id="${fixId}_list">${fixedBlockListMarkup(n)}</ul>
@@ -2283,8 +2283,8 @@ function rosterCardMarkup(n, wage) {
           <p class="hint">Guaranteed regardless of grade weighting — subtracted from the shared budget and from this student's own flexible target.</p>
           <div class="block-row">
             <select id="${lockId}_day">${dayOpts}</select>
-            <input type="time" id="${lockId}_start">
-            <input type="time" id="${lockId}_end">
+            <input type="time" id="${lockId}_start" value="09:00">
+            <input type="time" id="${lockId}_end" value="17:00">
             <button type="button" class="add-block-btn" id="${lockId}_addBtn">+</button>
           </div>
           <ul class="block-list" id="${lockId}_list">${lockedBlockListMarkup(n)}</ul>
@@ -2298,8 +2298,8 @@ function rosterCardMarkup(n, wage) {
           <div class="block-row">
             <select id="${clsId}_day">${dayOpts}</select>
             <input type="text" id="${clsId}_course" placeholder="Course / name">
-            <input type="time" id="${clsId}_start">
-            <input type="time" id="${clsId}_end">
+            <input type="time" id="${clsId}_start" value="09:00">
+            <input type="time" id="${clsId}_end" value="17:00">
             <select id="${clsId}_type">${classTypeOptionsHTML('Class')}</select>
             <button type="button" class="add-block-btn" id="${clsId}_addBtn">+</button>
           </div>
@@ -2356,17 +2356,6 @@ function wireGradeCard(n) {
     renderAll();
   });
 }
-// TEMPORARY DIAGNOSTIC — tracking down a Safari-only bug where clicking the
-// "+" add-entry buttons (Locked hours / Classes / Hours worked) does
-// nothing and throws no console error. A document-level CAPTURE-phase
-// listener catches the click regardless of whether the per-button listener
-// attached in wireRosterCard() ever fires, so it tells us whether the
-// click is reaching the button element at all. Safe to remove once this is
-// resolved — it only logs, never changes behavior.
-document.addEventListener('click', e => {
-  const t = e.target.closest && e.target.closest('.add-block-btn');
-  if (t) console.log('[DEBUG global-capture] add-block-btn click reached document, id=', t.id, 'target=', e.target.tagName);
-}, true);
 
 function wireRosterCard(n) {
   const persistIfCustom = () => { if (!BASE_NAMES.has(n)) saveCustomStudents(); };
@@ -2572,23 +2561,19 @@ function wireRosterCard(n) {
     lockTotalEl.textContent = entries.reduce((a, b) => a + Math.max(0, b.end - b.start), 0).toFixed(2) + 'h';
   };
   document.getElementById(lockId + '_addBtn').addEventListener('click', () => {
-    console.log('[DEBUG locked-add] click fired for', n);
     const day = document.getElementById(lockId + '_day').value;
     const startStr = document.getElementById(lockId + '_start').value;
     const endStr = document.getElementById(lockId + '_end').value;
-    console.log('[DEBUG locked-add] day=', day, 'start=', startStr, 'end=', endStr);
-    if (!startStr || !endStr) { console.log('[DEBUG locked-add] BAIL: missing start/end'); return; }
+    if (!startStr || !endStr) return;
     const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
-    if (end <= start) { console.log('[DEBUG locked-add] BAIL: end<=start', start, end); return; }
+    if (end <= start) return;
     const s = STUDENTS.find(x => x.name === n);
-    if (!s) { console.log('[DEBUG locked-add] BAIL: no student match for', n); return; }
+    if (!s) return;
     s.lockedBlocks = s.lockedBlocks || [];
     s.lockedBlocks.push({ day, start, end });
-    console.log('[DEBUG locked-add] pushed OK, total now', s.lockedBlocks.length);
     persistIfCustom();
     refreshLockedCard();
     renderAll();
-    console.log('[DEBUG locked-add] done');
   });
   lockList.addEventListener('click', e => {
     if (!e.target.classList.contains('rm-btn')) return;
@@ -2610,26 +2595,22 @@ function wireRosterCard(n) {
   };
 
   document.getElementById(clsId + '_addBtn').addEventListener('click', () => {
-    console.log('[DEBUG class-add] click fired for', n);
     const day = document.getElementById(clsId + '_day').value;
     const course = document.getElementById(clsId + '_course').value.trim();
     const startStr = document.getElementById(clsId + '_start').value;
     const endStr = document.getElementById(clsId + '_end').value;
     const type = document.getElementById(clsId + '_type').value;
-    console.log('[DEBUG class-add] day=', day, 'course=', course, 'start=', startStr, 'end=', endStr, 'type=', type);
-    if (!startStr || !endStr) { console.log('[DEBUG class-add] BAIL: missing start/end'); return; }
+    if (!startStr || !endStr) return;
     const start = round4(parseTimeStr(startStr)), end = round4(parseTimeStr(endStr));
-    if (end <= start) { console.log('[DEBUG class-add] BAIL: end<=start', start, end); return; }
+    if (end <= start) return;
     const s = STUDENTS.find(x => x.name === n);
-    if (!s) { console.log('[DEBUG class-add] BAIL: no student match for', n); return; }
+    if (!s) return;
     s.classes = s.classes || [];
     s.classes.push({ day, course: course || type, start, end, type });
-    console.log('[DEBUG class-add] pushed OK, total now', s.classes.length);
     persistIfCustom();
     document.getElementById(clsId + '_course').value = '';
     refreshClassList();
     renderAll();
-    console.log('[DEBUG class-add] done');
   });
 
   clsList.addEventListener('click', e => {
@@ -2658,20 +2639,16 @@ function wireRosterCard(n) {
     hwTotalEl.textContent = entries.reduce((a, e) => a + (Number(e.hours) || 0), 0).toFixed(2) + 'h';
   };
   document.getElementById(hwId + '_addBtn').addEventListener('click', () => {
-    console.log('[DEBUG hw-add] click fired for', n);
     const periodEl = document.getElementById(hwId + '_period');
     const hoursEl = document.getElementById(hwId + '_hours');
     const period = periodEl.value.trim();
     const hours = Math.max(0, parseFloat(hoursEl.value) || 0);
-    console.log('[DEBUG hw-add] period=', period, 'hours=', hours, 'rawHoursVal=', hoursEl.value);
-    if (!hours) { console.log('[DEBUG hw-add] BAIL: hours is 0/falsy'); return; }
+    if (!hours) return;
     HOURS_LOG.push({ name: n, period, hours, wage: WAGES[n] ?? DEFAULT_WAGE, loggedAt: new Date().toISOString() });
-    console.log('[DEBUG hw-add] pushed OK, HOURS_LOG length now', HOURS_LOG.length);
     periodEl.value = '';
     hoursEl.value = '';
     refreshHwCard();
     renderAll();
-    console.log('[DEBUG hw-add] done');
   });
   hwList.addEventListener('click', e => {
     if (!e.target.classList.contains('rm-btn')) return;
