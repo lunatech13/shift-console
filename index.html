@@ -280,13 +280,23 @@
   .fws-award-hint { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); text-align: right; }
 
   .fader-classes { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
-  .fader-classes summary {
-    font-size: 10.5px; color: var(--muted); cursor: pointer; list-style: none;
+  /* A plain button+div toggle, not <details>/<summary> — Safari has a real
+     bug where a native <input type="time"> (or other control with its own
+     shadow-DOM UI) that starts out inside a CLOSED <details> can render but
+     never actually accept focus/typing, even after the <details> is opened.
+     This bit both the Locked-hours and Class/blocked-off sections once they
+     were wrapped in <details> (confirmed by Paul: un-typeable time fields in
+     Safari, working fine in Chrome). The Fixed/Availability editors never
+     had this problem because they were always plain hidden-toggled <div>s,
+     never <details> — so that's the pattern every collapsible editor here
+     now uses. */
+  .fader-classes .classes-toggle {
+    font: inherit; font-size: 10.5px; color: var(--muted); cursor: pointer; background: none;
+    border: none; padding: 0; margin: 0; width: 100%; text-align: left;
     display: flex; align-items: center; gap: 5px; user-select: none;
   }
-  .fader-classes summary::-webkit-details-marker { display: none; }
-  .fader-classes summary::before { content: '▸'; font-size: 9px; color: var(--muted); transition: transform 0.15s; }
-  .fader-classes[open] summary::before { transform: rotate(90deg); }
+  .fader-classes .classes-toggle::before { content: '▸'; font-size: 9px; color: var(--muted); transition: transform 0.15s; display: inline-block; }
+  .fader-classes .classes-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
   .fader-classes .count-badge { color: var(--muted); }
   .classes-editor { margin-top: 8px; }
   .classes-editor .block-row { gap: 4px; }
@@ -1678,6 +1688,32 @@ function buildLockedBlocks(students, excludeDays, deptStart, deptEnd) {
   return out;
 }
 
+// A student's locked block(s) are a guaranteed slot carved OUT of their
+// availability before the flexible solver ever sees it — not just a number
+// subtracted from their hours goal. Without this, the flexible allocator
+// still had the full (uncarved) availability block to work with, including
+// the very time range already promised by the lock, and could schedule a
+// second, independent row for the same student overlapping the locked one
+// (the student "double-booked with themselves" on the grid). Carving the
+// locked interval(s) out of each availability block first — splitting it
+// into the open gap(s) that remain, via the same subtractIntervals used for
+// "auto" availability minus classes — means the flexible solver's own rows
+// can never land inside a time window this student already has locked.
+function carveLockedFromBlocks(dayBlocks, lockedBlist) {
+  if (!lockedBlist || !lockedBlist.length) return dayBlocks;
+  const byDay = {};
+  for (const b of lockedBlist) (byDay[b.day] ??= []).push([b.start, b.start + b.orig]);
+  const out = [];
+  for (const b of dayBlocks) {
+    const blockers = byDay[b.day];
+    if (!blockers || !blockers.length) { out.push(b); continue; }
+    for (const [gs, ge] of subtractIntervals(b.start, b.start + b.orig, blockers)) {
+      out.push({ ...b, start: round4(gs), orig: round4(ge - gs) });
+    }
+  }
+  return out;
+}
+
 function allocateStudentBlocks(dayBlocks, goalHours, minShift) {
   const usable = dayBlocks.filter(b => b.orig >= minShift - 1e-9);
   const totalUsable = usable.reduce((a, b) => a + b.orig, 0);
@@ -1808,9 +1844,13 @@ function buildScenario(blocks, goals, weight, minShift, maxConcurrent, budgetCap
     }
     // A locked slot counts toward this student's own target — the flexible
     // solver below only needs to fill whatever's left of it, from their
-    // OTHER (non-locked) availability.
+    // OTHER (non-locked) availability. Carving the locked time range(s) out
+    // of blist first (not just reducing the hours goal) is what stops the
+    // flexible solver from also scheduling this student during a slot
+    // they're already locked into.
     const remainingGoal = Math.max(0, (goals[student] || 0) - (lockedHoursByStudent[student] || 0));
-    const allocated = allocateStudentBlocks(blist, remainingGoal, minShift);
+    const carvedBlist = carveLockedFromBlocks(blist, lockedByStudent[student]);
+    const allocated = allocateStudentBlocks(carvedBlist, remainingGoal, minShift);
     if (fwsNames.has(student)) {
       // FWS: allocated the same way as SEP (proportionally fit to their own goal
       // hours) but never trimmed by the SEP budget cap below — that cap belongs
@@ -2237,9 +2277,9 @@ function rosterCardMarkup(n, wage) {
           <ul class="block-list" id="${fixId}_list">${fixedBlockListMarkup(n)}</ul>
         </div>
       </div>
-      <details class="fader-classes" id="${lockId}_panel"${fixed ? ' hidden' : ''}>
-        <summary>Locked hours <span class="count-badge" id="${lockId}_count">(${lockedCount})</span></summary>
-        <div class="classes-editor">
+      <div class="fader-classes" id="${lockId}_panel"${fixed ? ' hidden' : ''}>
+        <button type="button" class="classes-toggle" id="${lockId}_toggle" aria-expanded="false">Locked hours <span class="count-badge" id="${lockId}_count">(${lockedCount})</span></button>
+        <div class="classes-editor" id="${lockId}_editorWrap" hidden>
           <p class="hint">Guaranteed regardless of grade weighting — subtracted from the shared budget and from this student's own flexible target.</p>
           <div class="block-row">
             <select id="${lockId}_day">${dayOpts}</select>
@@ -2251,10 +2291,10 @@ function rosterCardMarkup(n, wage) {
           <div class="readout"><span>Locked this week</span><span id="${lockId}_total" class="mono">${lockedTotal.toFixed(2)}h</span></div>
           <p class="hint budget-derivation" id="${lockId}_hint"></p>
         </div>
-      </details>
-      <details class="fader-classes">
-        <summary>Class / blocked-off schedule <span class="count-badge" id="${clsId}_count">(${classCount})</span></summary>
-        <div class="classes-editor">
+      </div>
+      <div class="fader-classes">
+        <button type="button" class="classes-toggle" id="${clsId}_toggle" aria-expanded="false">Class / blocked-off schedule <span class="count-badge" id="${clsId}_count">(${classCount})</span></button>
+        <div class="classes-editor" id="${clsId}_editorWrap" hidden>
           <div class="block-row">
             <select id="${clsId}_day">${dayOpts}</select>
             <input type="text" id="${clsId}_course" placeholder="Course / name">
@@ -2265,10 +2305,10 @@ function rosterCardMarkup(n, wage) {
           </div>
           <ul class="block-list" id="${clsId}_list">${classBlockListMarkup(n)}</ul>
         </div>
-      </details>
-      <details class="fader-classes" id="${hwId}_panel"${studentType === 'FWS' ? ' hidden' : ''}>
-        <summary>Hours worked <span class="count-badge" id="${hwId}_count">(${hwCount})</span></summary>
-        <div class="classes-editor">
+      </div>
+      <div class="fader-classes" id="${hwId}_panel"${studentType === 'FWS' ? ' hidden' : ''}>
+        <button type="button" class="classes-toggle" id="${hwId}_toggle" aria-expanded="false">Hours worked <span class="count-badge" id="${hwId}_count">(${hwCount})</span></button>
+        <div class="classes-editor" id="${hwId}_editorWrap" hidden>
           <div class="block-row">
             <input type="text" id="${hwId}_period" placeholder="Pay period (e.g. Aug 16–31)">
             <input type="number" id="${hwId}_hours" placeholder="Hours" min="0" step="0.25">
@@ -2277,7 +2317,7 @@ function rosterCardMarkup(n, wage) {
           <ul class="block-list" id="${hwId}_list">${hwBlockListMarkup(n)}</ul>
           <div class="readout"><span>Logged this semester</span><span id="${hwId}_total" class="mono">${hwTotal.toFixed(2)}h</span></div>
         </div>
-      </details>
+      </div>
       <div class="remove-student-row">
         <button type="button" class="remove-student-btn">Remove student…</button>
         <div class="remove-confirm" hidden>
@@ -2318,6 +2358,24 @@ function wireGradeCard(n) {
 }
 function wireRosterCard(n) {
   const persistIfCustom = () => { if (!BASE_NAMES.has(n)) saveCustomStudents(); };
+
+  // Generic collapsible-section toggle for the Locked hours / Class / Hours
+  // worked sections — a plain button+div, not <details>/<summary> (see the
+  // CSS comment above .classes-toggle for why: Safari fails to make a
+  // native <input type="time"> typeable when it starts out inside a closed
+  // <details>, even after opening it).
+  const wireCollapseToggle = (toggleId, wrapId) => {
+    const toggle = document.getElementById(toggleId);
+    const wrap = document.getElementById(wrapId);
+    if (!toggle || !wrap) return;
+    toggle.addEventListener('click', () => {
+      wrap.hidden = !wrap.hidden;
+      toggle.setAttribute('aria-expanded', String(!wrap.hidden));
+    });
+  };
+  wireCollapseToggle('locked_' + slug(n) + '_toggle', 'locked_' + slug(n) + '_editorWrap');
+  wireCollapseToggle('classes_' + slug(n) + '_toggle', 'classes_' + slug(n) + '_editorWrap');
+  wireCollapseToggle('hw_' + slug(n) + '_toggle', 'hw_' + slug(n) + '_editorWrap');
 
   document.getElementById('wage_' + slug(n)).addEventListener('input', renderAll);
 
