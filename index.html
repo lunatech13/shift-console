@@ -259,6 +259,24 @@
     letter-spacing: 0.03em; color: var(--amber); background: var(--amber-soft, var(--surface-2));
     border: 1px solid var(--amber); border-radius: 4px; padding: 1px 5px;
   }
+  .disabled-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--alarm); background: var(--alarm-soft, var(--surface-2));
+    border: 1px solid var(--alarm); border-radius: 4px; padding: 1px 5px;
+  }
+  tr.is-disabled-row { opacity: 0.55; }
+  /* Dims the whole card (not just one control, like is-fixed does to the
+     weight slider) so a disabled student visually reads as "inactive" on
+     both the Roster and Grades tabs, without actually blocking edits — you
+     can still fill in wage/availability/etc. ahead of re-enabling them. */
+  .fader.is-disabled { opacity: 0.55; }
+  .fader.is-disabled .disabled-toggle { opacity: 1; } /* the toggle itself always stays legible */
+  .disabled-toggle {
+    display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; color: var(--alarm-ink, var(--alarm));
+    cursor: pointer; line-height: 1.35; font-weight: 600;
+  }
+  .disabled-toggle input[type="checkbox"] { margin-top: 1px; flex: 0 0 auto; }
+  .disabled-toggle-wrap { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
 
   .fader-type { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
   .type-label {
@@ -1644,6 +1662,11 @@ function buildBlocks(students, excludeDays, deptStart, deptEnd) {
   if (deptEnd === undefined) deptEnd = WINDOW_END;
   const out = [];
   for (const s of students) {
+    // Disabled = "on file but not currently part of the schedule at all"
+    // (e.g. a hire waiting on a contract) — no blocks means no capacity,
+    // no rows, and (via the totalGrade exclusion in recompute()) no dilution
+    // of other flexible students' weighted share either.
+    if (s.disabled) continue;
     const avail = (s.autoAvailability && !s.fixed) ? deriveAutoAvailability(s, deptStart, deptEnd) : s.availability;
     for (const a of avail) {
       if (excludeDays.includes(a.day)) continue;
@@ -1677,7 +1700,7 @@ function buildLockedBlocks(students, excludeDays, deptStart, deptEnd) {
   if (deptEnd === undefined) deptEnd = WINDOW_END;
   const out = [];
   for (const s of students) {
-    if (s.fixed) continue;
+    if (s.fixed || s.disabled) continue;
     for (const b of (s.lockedBlocks || [])) {
       if (excludeDays.includes(b.day)) continue;
       const start = Math.max(b.start, deptStart), end = Math.min(b.end, deptEnd);
@@ -1932,7 +1955,12 @@ function recompute() {
 
   const fixedNames = new Set(NAMES.filter(isFixedStudent));
   const fwsNames = new Set(NAMES.filter(isFWSStudent));
-  const totalGrade = NAMES.reduce((a, n) => a + (fixedNames.has(n) || fwsNames.has(n) ? 0 : grades[n]), 0) || 1;
+  const disabledNames = new Set(NAMES.filter(isDisabledStudent));
+  // Disabled students never draw a weighted share, so they're excluded from
+  // the denominator too — same treatment as Fixed/FWS, and for the same
+  // reason: including them here would shrink everyone ELSE's share for a
+  // student who's getting zero hours anyway.
+  const totalGrade = NAMES.reduce((a, n) => a + (fixedNames.has(n) || fwsNames.has(n) || disabledNames.has(n) ? 0 : grades[n]), 0) || 1;
 
   // Hours actually worked so far this semester, logged by hand per pay period —
   // checked against the shared Fall budget the same way the projected schedule
@@ -1950,6 +1978,7 @@ function recompute() {
   // clipped or mis-plotted on the grid. This never changes deptStart/deptEnd above,
   // so it has no effect on what flexible students can be offered.
   for (const n of fixedNames) {
+    if (disabledNames.has(n)) continue; // disabled overrides Fixed — not part of the schedule at all
     const s = STUDENTS.find(x => x.name === n);
     for (const a of (s && s.availability) || []) {
       WINDOW_START = Math.min(WINDOW_START, a.start);
@@ -2001,7 +2030,17 @@ function recompute() {
 
   const weight = {}, rawTarget = {}, cappedTarget = {}, goalNoFri = {}, fwsWeeklyHours = {};
   for (const n of NAMES) {
-    if (fixedNames.has(n)) {
+    if (disabledNames.has(n)) {
+      // On file, but not part of the schedule at all — no weighted share,
+      // no target, no rows. (capWithFri/capNoFri are already 0 for them
+      // since buildBlocks() skips disabled students outright, so this
+      // branch is mostly just making that explicit rather than falling
+      // through to the Fixed/FWS math below with zeroed inputs.)
+      weight[n] = 0;
+      rawTarget[n] = 0;
+      cappedTarget[n] = 0;
+      goalNoFri[n] = 0;
+    } else if (fixedNames.has(n)) {
       weight[n] = 0;
       rawTarget[n] = capWithFri[n];
       cappedTarget[n] = capWithFri[n];
@@ -2059,7 +2098,7 @@ function recompute() {
     capWithFri, capNoFri, weight, rawTarget, cappedTarget, goalNoFri,
     withFri, noFri, schedWithFri, schedNoFri,
     wages, weeklyCostWithFri, weeklyCostNoFri, semesterCostWithFri,
-    locations, activeLocations, fixedNames, fwsNames, fwsWeeklyHours, lockedHoursWithFri,
+    locations, activeLocations, fixedNames, fwsNames, disabledNames, fwsWeeklyHours, lockedHoursWithFri,
   };
 }
 
@@ -2122,6 +2161,10 @@ function isFWSStudent(name) {
   const s = STUDENTS.find(x => x.name === name);
   return !!(s && s.studentType === 'FWS');
 }
+function isDisabledStudent(name) {
+  const s = STUDENTS.find(x => x.name === name);
+  return !!(s && s.disabled);
+}
 function fixedBlockListMarkup(n) {
   const s = STUDENTS.find(x => x.name === n);
   const items = ((s && s.availability) || []).map((b, i) => ({ ...b, i }))
@@ -2178,9 +2221,10 @@ function gradeCardMarkup(n, g) {
   const id = 'grade_' + slug(n);
   const fixed = isFixedStudent(n);
   const fws = isFWSStudent(n);
-  return `<div class="fader${fixed ? ' is-fixed' : ''}${fws ? ' is-fws' : ''}" id="gradecard_${slug(n)}" data-student="${esc(n)}">
+  const disabled = isDisabledStudent(n);
+  return `<div class="fader${fixed ? ' is-fixed' : ''}${fws ? ' is-fws' : ''}${disabled ? ' is-disabled' : ''}" id="gradecard_${slug(n)}" data-student="${esc(n)}">
       <div class="fader-top">
-        <span class="fader-name">${esc(n)}${fws ? ' <span class="fws-badge">FWS</span>' : ''}</span>
+        <span class="fader-name">${esc(n)}${fws ? ' <span class="fws-badge">FWS</span>' : ''}${disabled ? ' <span class="disabled-badge">Disabled</span>' : ''}</span>
         <span class="fader-value admin-only" id="${id}_val">${g}</span>
         <span class="fader-value-lock viewer-mask">🔒</span>
       </div>
@@ -2206,7 +2250,9 @@ function rosterCardMarkup(n, wage) {
   const typeId = 'type_' + slug(n);
   const hwId = 'hw_' + slug(n);
   const lockId = 'locked_' + slug(n);
+  const disId = 'disabled_' + slug(n);
   const fixed = isFixedStudent(n);
+  const disabled = isDisabledStudent(n);
   const dayOpts = ALL_DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
   const classCount = ((STUDENTS.find(x => x.name === n) || {}).classes || []).length;
   const student = STUDENTS.find(x => x.name === n) || {};
@@ -2221,9 +2267,15 @@ function rosterCardMarkup(n, wage) {
   const lockedEntries = student.lockedBlocks || [];
   const lockedCount = lockedEntries.length;
   const lockedTotal = lockedEntries.reduce((a, b) => a + Math.max(0, b.end - b.start), 0);
-  return `<div class="fader roster-card panel${fixed ? ' is-fixed' : ''}${studentType === 'FWS' ? ' is-fws' : ''}" id="rostercard_${slug(n)}" data-student="${esc(n)}">
+  return `<div class="fader roster-card panel${fixed ? ' is-fixed' : ''}${studentType === 'FWS' ? ' is-fws' : ''}${disabled ? ' is-disabled' : ''}" id="rostercard_${slug(n)}" data-student="${esc(n)}">
       <div class="fader-top">
-        <span class="fader-name">${esc(n)}${studentType === 'FWS' ? ' <span class="fws-badge">FWS</span>' : ''}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}</span>
+        <span class="fader-name">${esc(n)}${studentType === 'FWS' ? ' <span class="fws-badge">FWS</span>' : ''}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}${disabled ? ' <span class="disabled-badge">Disabled</span>' : ''}</span>
+      </div>
+      <div class="disabled-toggle-wrap">
+        <label class="disabled-toggle">
+          <input type="checkbox" id="${disId}"${disabled ? ' checked' : ''}>
+          <span>Disabled — keep everything on file, but remove from scheduling &amp; budget (e.g. no contract yet)</span>
+        </label>
       </div>
       <div class="fader-bottom">
         <span class="fader-wage admin-only"><input type="number" id="${wageId}" value="${wage.toFixed(2)}" min="0" step="0.05">/hr</span>
@@ -2379,6 +2431,25 @@ function wireRosterCard(n) {
   wireCollapseToggle('hw_' + slug(n) + '_toggle', 'hw_' + slug(n) + '_editorWrap');
 
   document.getElementById('wage_' + slug(n)).addEventListener('input', renderAll);
+
+  // Disabled — keeps everything about the student on file (wage, grade,
+  // availability, Fixed hours, Locked hours, all of it) but pulls them out
+  // of the solver entirely: buildBlocks()/buildLockedBlocks() skip disabled
+  // students outright, so they generate zero rows on either grid and don't
+  // dilute other flexible students' weighted share. See the comments on
+  // isDisabledStudent()/buildBlocks() for the mechanics.
+  const disId = 'disabled_' + slug(n);
+  const disChk = document.getElementById(disId);
+  const rosterCardTopEl = disChk.closest('.fader');
+  disChk.addEventListener('change', () => {
+    const s = STUDENTS.find(x => x.name === n);
+    if (s) s.disabled = disChk.checked;
+    rosterCardTopEl.classList.toggle('is-disabled', disChk.checked);
+    const gc = document.getElementById('gradecard_' + slug(n));
+    if (gc) gc.classList.toggle('is-disabled', disChk.checked);
+    persistIfCustom();
+    renderAll();
+  });
 
   const typeId = 'type_' + slug(n);
   const typeSel = document.getElementById(typeId);
@@ -2734,10 +2805,11 @@ function renderPlan(state) {
       const utilNoFri = state.capNoFri[n] ? state.schedNoFri[n] / state.capNoFri[n] * 100 : 0;
       const fixed = state.fixedNames && state.fixedNames.has(n);
       const fws = state.fwsNames && state.fwsNames.has(n);
-      return `<tr>
-        <td>${esc(n)}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}${fws ? ' <span class="fws-badge">FWS</span>' : ''}</td>
-        <td class="admin-only">${fixed || fws ? '—' : state.grades[n]}</td>
-        <td class="admin-only">${fixed ? '—' : fws ? 'own award' : (state.weight[n] * 100).toFixed(1) + '%'}</td>
+      const disabled = state.disabledNames && state.disabledNames.has(n);
+      return `<tr${disabled ? ' class="is-disabled-row"' : ''}>
+        <td>${esc(n)}${fixed ? ' <span class="fixed-badge">Fixed</span>' : ''}${fws ? ' <span class="fws-badge">FWS</span>' : ''}${disabled ? ' <span class="disabled-badge">Disabled</span>' : ''}</td>
+        <td class="admin-only">${fixed || fws || disabled ? '—' : state.grades[n]}</td>
+        <td class="admin-only">${disabled ? '—' : fixed ? '—' : fws ? 'own award' : (state.weight[n] * 100).toFixed(1) + '%'}</td>
         <td>${state.capWithFri[n].toFixed(2)}h</td>
         <td>${state.cappedTarget[n].toFixed(2)}h</td>
         <td>${state.schedWithFri[n].toFixed(2)}h</td>
@@ -2811,7 +2883,7 @@ function renderPayroll(state) {
     const names = byLoc[loc];
     bodyHtml += `<tr class="location-row"><td colspan="7">${esc(loc)}</td></tr>`;
     bodyHtml += names.map(n => `<tr>
-        <td>${esc(n)}${state.fixedNames && state.fixedNames.has(n) ? ' <span class="fixed-badge">Fixed</span>' : ''}${state.fwsNames && state.fwsNames.has(n) ? ' <span class="fws-badge">FWS</span>' : ''}</td>
+        <td>${esc(n)}${state.fixedNames && state.fixedNames.has(n) ? ' <span class="fixed-badge">Fixed</span>' : ''}${state.fwsNames && state.fwsNames.has(n) ? ' <span class="fws-badge">FWS</span>' : ''}${state.disabledNames && state.disabledNames.has(n) ? ' <span class="disabled-badge">Disabled</span>' : ''}</td>
         <td>$${state.wages[n].toFixed(2)}/hr</td>
         <td>${state.schedWithFri[n].toFixed(2)}h</td>
         <td>$${state.weeklyCostWithFri[n].toFixed(2)}</td>
@@ -3176,8 +3248,10 @@ function renderAll() {
     const w = document.getElementById(id + '_weight');
     const s = STUDENTS.find(x => x.name === n);
     const isFws = state.fwsNames && state.fwsNames.has(n);
+    const isDisabled = state.disabledNames && state.disabledNames.has(n);
     if (w) {
-      if (isFws) w.textContent = 'FWS · own award';
+      if (isDisabled) w.textContent = 'Disabled — not scheduled';
+      else if (isFws) w.textContent = 'FWS · own award';
       else w.textContent = (state.weight[n] * 100).toFixed(1) + '% share';
     }
 
@@ -3275,10 +3349,12 @@ function renderAll() {
   document.getElementById('summaryOut').textContent =
     NAMES.map(n => {
       const isFws = state.fwsNames && state.fwsNames.has(n);
+      const isDisabled = state.disabledNames && state.disabledNames.has(n);
       const s = STUDENTS.find(x => x.name === n);
-      return isFws
+      const line = isFws
         ? `${n}: FWS, $${state.wages[n].toFixed(2)}/hr, $${Math.max(0, (s && s.semesterAward) || 0).toFixed(2)} semester award`
         : `${n}: SEP, grade ${state.grades[n]}, $${state.wages[n].toFixed(2)}/hr`;
+      return isDisabled ? `${line} — DISABLED, not scheduled` : line;
     }).join('\n') +
     `\n\nBudget: ${state.budgetMode === 'dollars' ? `$${state.budgetAward.toFixed(2)} ÷ $${state.budgetRate.toFixed(2)}/hr = ` : ''}${state.fallBudget.toFixed(1)}h fall / ${state.usableWeeks} usable weeks (${state.weeklyRate.toFixed(2)}h/wk) — SEP only` +
     `\nAnnual award: ${state.annualAward.toFixed(1)}h fiscal year — ${state.fallBudget.toFixed(1)}h fall leaves ${state.springRemaining.toFixed(1)}h for spring` +
@@ -3485,6 +3561,7 @@ function wireAddStudentPanel() {
       availability: pendingAvail.map(b => ({ ...b })),
       classes: pendingClasses.map(c => ({ ...c })),
       lockedBlocks: [],
+      disabled: false,
     };
     STUDENTS.push(student);
     NAMES.push(name);
