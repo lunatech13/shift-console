@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Shift Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -146,6 +147,11 @@
   @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
 
   .console { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 20px; }
+  .admin-settings { display: flex; flex-direction: column; gap: 12px; }
+  .admin-divider { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 10.5px;
+    font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .admin-divider::before, .admin-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .admin-divider span::before { content: "🔒 "; }
   @media (max-width: 880px) { .console { position: static; } }
 
   .panel {
@@ -650,8 +656,14 @@
         <div class="readout admin-only"><span>Payroll $ paid so far (SEP)</span><span id="hwPayrollOut" class="mono">—</span></div>
       </section>
 
+      <!-- Admin settings: department-wide knobs (open hours, policy, grade
+           weights). Kept in the sidebar so the admin still watches the grid
+           reflow while adjusting them, but hidden entirely from viewers via the
+           same .admin-only convention as wage/payroll figures. -->
+      <div class="admin-settings admin-only">
+      <div class="admin-divider"><span>Admin settings</span></div>
       <section class="panel">
-        <h2>Hours <span class="hint">department open/close, 8am–6pm range</span></h2>
+        <h2>Dept Hours <span class="hint">open/close, 8am–6pm range</span></h2>
         <div class="field">
           <label>Opening time</label>
           <select id="openTime"></select>
@@ -687,6 +699,7 @@
           <button type="button" data-preset="equal">Equal weight</button>
         </div>
       </section>
+      </div>
     </aside>
 
     <main class="stage">
